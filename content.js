@@ -35,7 +35,7 @@
   // ─── Overlay piercing ─────────────────────────────────────────────────────
   // Temporarily disables pointer-events on layers to find the real target
   function deepestTarget(x, y) {
-    const MAX_DEPTH = 12;
+    const MAX_DEPTH = 20;
     const disabled = [];
     let target = null;
 
@@ -50,7 +50,15 @@
         el.querySelector('img, video, canvas, svg') ||
         style.backgroundImage !== 'none';
 
-      if (hasContent || i >= 3) { target = el; break; }
+      // Likely overlay: positioned and no real content
+      const isOverlay = (style.position === 'fixed' || style.position === 'absolute') &&
+                        !hasContent;
+
+      // Accept if it has content AND not a likely overlay, or we've dug deep enough
+      if ((hasContent && !isOverlay) || i >= 5) {
+        target = el;
+        break;
+      }
 
       el.style.setProperty('pointer-events', 'none', 'important');
       disabled.push(el);
@@ -99,7 +107,7 @@
   }
 
   function onPickClick(e) {
-    const target = deepestTarget(e.clientX, e.clientY);
+    const target = deepestTarget(e.clientX, e.clientY, e.shiftKey);
     if (!target || target.closest('#dissolve-ui')) return;
 
     if (!selectedEl) {
@@ -243,7 +251,7 @@
 
   // ─── Hide + persist ───────────────────────────────────────────────────────
   function hideEl(el) {
-    el.style.setProperty('visibility', 'hidden', 'important');
+    el.style.setProperty('display', 'none', 'important');
     el.style.setProperty('pointer-events', 'none', 'important');
     const record = persistHide(el);
     hiddenLog.push({ el, record });
@@ -289,11 +297,11 @@
     try {
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
       stored.forEach(sel => {
-        try { const el = document.querySelector(sel); if (el) { el.style.removeProperty('visibility'); el.style.removeProperty('pointer-events'); } } catch {}
+        try { const el = document.querySelector(sel); if (el) { el.style.removeProperty('display'); el.style.removeProperty('pointer-events'); } } catch {}
       });
       localStorage.removeItem(STORAGE_KEY);
     } catch {}
-    hiddenLog.forEach(({ el }) => { el.style.removeProperty('visibility'); el.style.removeProperty('pointer-events'); });
+    hiddenLog.forEach(({ el }) => { el.style.removeProperty('display'); el.style.removeProperty('pointer-events'); });
     hiddenLog = [];
     updateBadge();
   }
@@ -315,6 +323,7 @@
         <div class="d-help-row"><span class="d-key">1st tap</span><span>Select an item — it turns blue</span></div>
         <div class="d-help-row"><span class="d-key">2nd tap</span><span>Dissolve it away ✦</span></div>
         <div class="d-help-row"><span class="d-key">Other tap</span><span>Change selection</span></div>
+        <div class="d-help-row"><span class="d-key">Shift+click</span><span>Pierce deeper overlays</span></div>
         <div class="d-help-row"><span class="d-key">Esc</span><span>Deselect / Exit</span></div>
         <p class="d-note">Hidden items are remembered next time you visit this page.</p>
       </div>
