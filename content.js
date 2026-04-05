@@ -160,6 +160,14 @@
     }
   }
 
+  function onContextMenu(e) {
+    e.preventDefault();
+    if (selectedEl) {
+      clearSelected();
+      document.getElementById('dissolve-bar')?.classList.remove('dissolve-bar-ready');
+    }
+  }
+
   // ─── Dissolve animation ───────────────────────────────────────────────────
   function dissolveElement(el) {
     if (!el || el.closest('#dissolve-ui')) return;
@@ -347,9 +355,11 @@
         <button id="d-done">Done</button>
       </div>
       <div id="d-help" class="d-hidden">
-        <div class="d-help-row"><span class="d-key">1st tap</span><span>Select an item — it turns blue</span></div>
+        <div class="d-help-row"><span class="d-key">1st tap</span><span>Select an item — it turns green</span></div>
         <div class="d-help-row"><span class="d-key">2nd tap</span><span>Dissolve it away ✦</span></div>
         <div class="d-help-row"><span class="d-key">Other tap</span><span>Change selection</span></div>
+        <div class="d-help-row"><span class="d-key">Right-click</span><span>Deselect current item</span></div>
+        <div class="d-help-row"><span class="d-key">Esc</span><span>Deselect or exit mode</span></div>
         <button id="d-debug-toggle" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); cursor: pointer; font-size: 12px;">Debug Mode: OFF</button>
         <p class="d-note">Hidden items are remembered next time you visit this page.</p>
       </div>
@@ -400,6 +410,7 @@
     buildUI();
     document.addEventListener('mousemove', onMouseMove, true);
     document.addEventListener('click', onPickClick, true);
+    document.addEventListener('contextmenu', onContextMenu, true);
     document.addEventListener('keydown', onKeyDown, true);
     installBlockers();
   }
@@ -414,6 +425,7 @@
     destroyUI();
     document.removeEventListener('mousemove', onMouseMove, true);
     document.removeEventListener('click', onPickClick, true);
+    document.removeEventListener('contextmenu', onContextMenu, true);
     document.removeEventListener('keydown', onKeyDown, true);
   }
 
