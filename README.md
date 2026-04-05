@@ -30,7 +30,7 @@ This is a Manifest V3 extension.
 
 ## Version
 
-Current development version: `1.0.10`
+Current development version: `1.0.11`
 
 For Edge Add-ons submission details, see [STORE_SUBMISSION.md](STORE_SUBMISSION.md).
 

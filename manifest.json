@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Dissolve — Hide Distracting Items",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "Click any element to dissolve it away. Like Safari's Distraction Control, for Edge.",
   "permissions": ["activeTab", "storage"],
   "host_permissions": ["<all_urls>"],
