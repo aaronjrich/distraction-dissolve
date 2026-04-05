@@ -46,20 +46,32 @@
 
       const style = getComputedStyle(el);
       const rect = el.getBoundingClientRect();
+      
+      const vpW = window.innerWidth;
+      const vpH = window.innerHeight;
       const hasContent =
         el.textContent.trim().length > 0 ||
         el.querySelector('img, video, canvas, svg') ||
         style.backgroundImage !== 'none';
 
-      // Skip large sidebars/overlays: positioned elements without content
-      const vpW = window.innerWidth;
-      const vpH = window.innerHeight;
-      const isPositioned = style.position === 'fixed' || style.position === 'absolute';
-      const isLargeEmpty = isPositioned && rect.width > vpW * 0.2 && !hasContent;
-      const isSidebar = isPositioned && rect.height > vpH * 0.5 && !hasContent;
+      // Check if element is interactive
+      const isInteractive = el.tagName === 'BUTTON' || el.tagName === 'A' || 
+                            el.tagName === 'INPUT' || el.tagName === 'SELECT' ||
+                            el.getAttribute('role') === 'button' ||
+                            el.getAttribute('role') === 'link' ||
+                            style.cursor === 'pointer';
 
-      // Accept if it has content (and not a sidebar), or we've dug deep enough
-      if ((hasContent && !isLargeEmpty && !isSidebar) || i >= 8) {
+      // Detect structural/layout containers by class name patterns
+      const classStr = (el.className || '').toLowerCase();
+      const tagStr = (el.tagName || '').toLowerCase();
+      const containerKeywords = ['page', 'feed', 'wrapper', 'container', 'structure', 'provider', 'root', 'grid', 'layout'];
+      const isStructural = containerKeywords.some(kw => classStr.includes(kw) || tagStr.includes(kw));
+      
+      // Skip structural containers unless they're small or interactive
+      const isLargeStructural = isStructural && rect.width > vpW * 0.3 && !isInteractive;
+
+      // Accept if interactive, or has content and not structural, or we've dug deep enough
+      if (isInteractive || (hasContent && !isLargeStructural) || i >= 15) {
         target = el;
         break;
       }
