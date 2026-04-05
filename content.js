@@ -45,6 +45,9 @@
       if (!el || el === document.documentElement || el === document.body) break;
       if (el.closest('#dissolve-ui')) break;
 
+      // Never select structural elements
+      if (el.tagName === 'HTML' || el.tagName === 'BODY') break;
+
       const style = getComputedStyle(el);
       const rect = el.getBoundingClientRect();
       
@@ -65,7 +68,7 @@
       // Detect structural/layout containers by class name patterns
       const classStr = (el.className || '').toLowerCase();
       const tagStr = (el.tagName || '').toLowerCase();
-      const containerKeywords = ['page', 'feed', 'wrapper', 'container', 'structure', 'provider', 'root', 'grid', 'layout'];
+      const containerKeywords = ['page', 'feed', 'wrapper', 'container', 'structure', 'provider', 'root', 'grid', 'layout', 'block', 'site'];
       const isStructural = containerKeywords.some(kw => classStr.includes(kw) || tagStr.includes(kw));
       
       // Skip structural containers unless they're small or interactive
@@ -151,12 +154,6 @@
     if (e.key === 'Escape') {
       if (selectedEl) clearSelected();  // first Esc: deselect
       else exitPickMode();              // second Esc: exit
-    }
-    // Ctrl+Shift+D to toggle debug mode
-    if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-      debugMode = !debugMode;
-      localStorage.setItem('dissolve-debug', debugMode);
-      console.log('Dissolve debug mode:', debugMode ? 'ON' : 'OFF');
     }
   }
 
@@ -352,7 +349,7 @@
         <div class="d-help-row"><span class="d-key">Other tap</span><span>Change selection</span></div>
         <div class="d-help-row"><span class="d-key">Shift+click</span><span>Pierce deeper overlays</span></div>
         <div class="d-help-row"><span class="d-key">Esc</span><span>Deselect / Exit</span></div>
-        <div class="d-help-row"><span class="d-key">Ctrl+Shift+D</span><span>Toggle debug logging</span></div>
+        <button id="d-debug-toggle" style="margin-top: 8px; width: 100%; padding: 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); cursor: pointer; font-size: 12px;">Debug Mode: OFF</button>
         <p class="d-note">Hidden items are remembered next time you visit this page.</p>
       </div>
     `;
@@ -360,12 +357,28 @@
 
     document.getElementById('d-done').addEventListener('click', exitPickMode);
     document.getElementById('d-showall').addEventListener('click', showAll);
+    document.getElementById('d-debug-toggle').addEventListener('click', () => {
+      debugMode = !debugMode;
+      localStorage.setItem('dissolve-debug', debugMode);
+      const btn = document.getElementById('d-debug-toggle');
+      btn.textContent = `Debug Mode: ${debugMode ? 'ON' : 'OFF'}`;
+      btn.style.background = debugMode ? 'rgba(99, 179, 237, 0.2)' : 'rgba(255,255,255,0.08)';
+      btn.style.color = debugMode ? '#90cdf4' : 'rgba(255,255,255,0.7)';
+      console.log('Dissolve debug mode:', debugMode ? 'ON' : 'OFF');
+    });
     document.getElementById('d-help-btn').addEventListener('click', () => {
       const panel = document.getElementById('d-help');
       const btn = document.getElementById('d-help-btn');
       const isOpen = !panel.classList.contains('d-hidden');
       panel.classList.toggle('d-hidden', isOpen);
       btn.classList.toggle('d-help-active', !isOpen);
+      // Update debug button state when help opens
+      if (!isOpen) {
+        const debugBtn = document.getElementById('d-debug-toggle');
+        debugBtn.textContent = `Debug Mode: ${debugMode ? 'ON' : 'OFF'}`;
+        debugBtn.style.background = debugMode ? 'rgba(99, 179, 237, 0.2)' : 'rgba(255,255,255,0.08)';
+        debugBtn.style.color = debugMode ? '#90cdf4' : 'rgba(255,255,255,0.7)';
+      }
     });
   }
 
