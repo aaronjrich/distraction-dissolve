@@ -363,8 +363,8 @@
       localStorage.setItem('dissolve-debug', debugMode);
       const btn = document.getElementById('d-debug-toggle');
       btn.textContent = `Debug Mode: ${debugMode ? 'ON' : 'OFF'}`;
-      btn.style.background = debugMode ? 'rgba(99, 179, 237, 0.2)' : 'rgba(255,255,255,0.08)';
-      btn.style.color = debugMode ? '#90cdf4' : 'rgba(255,255,255,0.7)';
+      btn.style.background = debugMode ? 'rgba(72, 187, 120, 0.2)' : 'rgba(255,255,255,0.08)';
+      btn.style.color = debugMode ? '#9ae6b4' : 'rgba(255,255,255,0.7)';
       console.log('Dissolve debug mode:', debugMode ? 'ON' : 'OFF');
     });
     document.getElementById('d-help-btn').addEventListener('click', () => {
@@ -377,8 +377,8 @@
       if (!isOpen) {
         const debugBtn = document.getElementById('d-debug-toggle');
         debugBtn.textContent = `Debug Mode: ${debugMode ? 'ON' : 'OFF'}`;
-        debugBtn.style.background = debugMode ? 'rgba(99, 179, 237, 0.2)' : 'rgba(255,255,255,0.08)';
-        debugBtn.style.color = debugMode ? '#90cdf4' : 'rgba(255,255,255,0.7)';
+        debugBtn.style.background = debugMode ? 'rgba(72, 187, 120, 0.2)' : 'rgba(255,255,255,0.08)';
+        debugBtn.style.color = debugMode ? '#9ae6b4' : 'rgba(255,255,255,0.7)';
       }
     });
   }

@@ -16,12 +16,12 @@ body.dissolve-pick-mode * {
 
 /* ── Selected state (first tap) ───────────────────────────────────────────── */
 .dissolve-selected {
-  outline: 2px solid #63b3ed !important;
+  outline: 2px solid #48bb78 !important;
   outline-offset: 2px !important;
-  box-shadow: 0 0 0 4px rgba(99, 179, 237, 0.18) !important;
+  box-shadow: 0 0 0 4px rgba(72, 187, 120, 0.18) !important;
   opacity: 1 !important;
   transition: outline 0.1s ease, box-shadow 0.1s ease !important;
-  animation: dissolve-select-blink 0.3s ease-out !important;
+  animation: dissolve-select-blink 0.6s ease-out !important;
 }
 
 @keyframes dissolve-select-blink {
