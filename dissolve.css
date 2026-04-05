@@ -1,0 +1,135 @@
+/* ── Pick mode cursor ─────────────────────────────────────────────────────── */
+body.dissolve-pick-mode,
+body.dissolve-pick-mode * {
+  cursor: crosshair !important;
+}
+
+/* ── Hover highlight ──────────────────────────────────────────────────────── */
+.dissolve-hover {
+  outline: 2px solid rgba(99, 179, 237, 0.9) !important;
+  outline-offset: 2px !important;
+  background-color: rgba(99, 179, 237, 0.08) !important;
+  transition: outline 0.08s ease, background-color 0.08s ease !important;
+  border-radius: 3px !important;
+}
+
+/* ── UI bar ───────────────────────────────────────────────────────────────── */
+#dissolve-ui {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147483646;
+  pointer-events: none;
+  animation: dissolve-bar-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes dissolve-bar-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(16px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+#dissolve-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(15, 15, 20, 0.92);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 100px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  pointer-events: all;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  user-select: none;
+}
+
+#dissolve-icon {
+  font-size: 14px;
+  color: #63b3ed;
+  animation: dissolve-pulse 2s ease-in-out infinite;
+}
+
+@keyframes dissolve-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}
+
+#dissolve-label {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+}
+
+#dissolve-counter {
+  background: rgba(99, 179, 237, 0.2);
+  color: #90cdf4;
+  border: 1px solid rgba(99, 179, 237, 0.3);
+  border-radius: 100px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  transition: opacity 0.2s ease;
+}
+
+#dissolve-counter.dissolve-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#dissolve-undo,
+#dissolve-done {
+  border: none;
+  border-radius: 100px;
+  padding: 5px 13px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+#dissolve-undo {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#dissolve-undo:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+#dissolve-done {
+  background: #63b3ed;
+  color: #0f0f14;
+  font-weight: 600;
+}
+
+#dissolve-done:hover {
+  background: #90cdf4;
+  transform: scale(1.03);
+}
+
+#dissolve-done:active {
+  transform: scale(0.98);
+}
+
+/* Canvas particles sit above everything */
+.dissolve-canvas {
+  z-index: 2147483647;
+  pointer-events: none;
+}
