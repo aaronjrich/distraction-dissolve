@@ -118,12 +118,12 @@
   // ─── iOS two-tap interaction ──────────────────────────────────────────────
   function onMouseMove(e) {
     // Only show hover preview when nothing is selected yet
-    ifconst target = deepestTarget(e.clientX, e.clientY);
+    if (!selectedEl) {
+      const target = deepestTarget(e.clientX, e.clientY);
       if (debugMode) {
         console.log('Hovered target:', target?.tagName, target?.className, target?.id, 'size:', target?.getBoundingClientRect().width + 'x' + target?.getBoundingClientRect().height);
       }
-      setHovered(target
-      setHovered(deepestTarget(e.clientX, e.clientY));
+      setHovered(target);
     }
   }
 
@@ -147,16 +147,16 @@
     }
   }
 
+  function onKeyDown(e) {
+    if (e.key === 'Escape') {
+      if (selectedEl) clearSelected();  // first Esc: deselect
+      else exitPickMode();              // second Esc: exit
+    }
     // Ctrl+Shift+D to toggle debug mode
     if (e.ctrlKey && e.shiftKey && e.key === 'D') {
       debugMode = !debugMode;
       localStorage.setItem('dissolve-debug', debugMode);
       console.log('Dissolve debug mode:', debugMode ? 'ON' : 'OFF');
-    }
-  function onKeyDown(e) {
-    if (e.key === 'Escape') {
-      if (selectedEl) clearSelected();  // first Esc: deselect
-      else exitPickMode();              // second Esc: exit
     }
   }
 
