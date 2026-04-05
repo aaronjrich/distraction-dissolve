@@ -59,6 +59,9 @@ Dissolve helps you stay focused by letting you remove distractions directly in t
 - a privacy policy URL
 - a support URL pointing to this GitHub repo
 
+If you enable GitHub Pages for this repo using the `docs/` folder, the policy URL can be:
+`https://aaronjrich.github.io/distraction-dissolve/privacy-policy.html`
+
 Once submitted, Microsoft will review the extension and publish it after approval.
 
 ## Support
