@@ -45,17 +45,21 @@
       if (el.closest('#dissolve-ui')) break;
 
       const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
       const hasContent =
         el.textContent.trim().length > 0 ||
         el.querySelector('img, video, canvas, svg') ||
         style.backgroundImage !== 'none';
 
-      // Likely overlay: positioned and no real content
-      const isOverlay = (style.position === 'fixed' || style.position === 'absolute') &&
-                        !hasContent;
+      // Skip large sidebars/overlays: positioned elements without content
+      const vpW = window.innerWidth;
+      const vpH = window.innerHeight;
+      const isPositioned = style.position === 'fixed' || style.position === 'absolute';
+      const isLargeEmpty = isPositioned && rect.width > vpW * 0.2 && !hasContent;
+      const isSidebar = isPositioned && rect.height > vpH * 0.5 && !hasContent;
 
-      // Accept if it has content AND not a likely overlay, or we've dug deep enough
-      if ((hasContent && !isOverlay) || i >= 5) {
+      // Accept if it has content (and not a sidebar), or we've dug deep enough
+      if ((hasContent && !isLargeEmpty && !isSidebar) || i >= 8) {
         target = el;
         break;
       }
