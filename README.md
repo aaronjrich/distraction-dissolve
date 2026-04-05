@@ -34,16 +34,36 @@ Current development version: `1.0.10`
 
 ## Microsoft Edge Add-ons Submission
 
-To publish this extension to the Microsoft Edge Add-ons store, package the extension source as a ZIP file and submit it through the Microsoft Edge Partner Center.
+Dissolve is ready for submission to the Microsoft Edge Add-ons store.
 
-Required items:
+### Store listing copy
+
+**Short description:**
+Click any webpage element to hide it instantly and remove distracting banners, sidebars, overlays, and more.
+
+**Full description:**
+Dissolve helps you stay focused by letting you remove distractions directly in the page. Click the extension icon to enter pick mode, hover to preview a target, and click to select an item. Selected elements glow green and can be dissolved away with a second click. Right-click or press `Esc` to cancel selection, and press `Esc` again to exit pick mode.
+
+**Key features:**
+- Quickly hide distracting page elements
+- Red hover preview, green selected state
+- Cancel selection with right-click or `Esc`
+- Debug mode for troubleshooting
+- Remember hidden items per page
+
+### Submission requirements
+
 - `manifest.json` with a valid `version`
 - 300x300 and 150x150 store icons
-- screenshots of the extension in use
+- screenshots showing pick mode and hidden results
 - a privacy policy URL
-- a support URL (your GitHub repo)
+- a support URL pointing to this GitHub repo
 
 Once submitted, Microsoft will review the extension and publish it after approval.
+
+## Support
+
+Support URL: `https://github.com/aaronjrich/distraction-dissolve`
 
 ## License
 
