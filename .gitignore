@@ -1,0 +1,6 @@
+# Ignore build artifacts and package files
+node_modules/
+*.log
+*.zip
+.DS_Store
+Thumbs.db
