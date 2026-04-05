@@ -7,9 +7,10 @@ body.dissolve-pick-mode * {
 
 /* ── Hover grey preview ───────────────────────────────────────────────────── */
 .dissolve-hovered {
-  opacity: 0.45 !important;
-  outline: 1px dashed rgba(150, 150, 150, 0.6) !important;
-  outline-offset: 1px !important;
+  opacity: 0.6 !important;
+  outline: 2px solid rgba(239, 68, 68, 0.8) !important;
+  outline-offset: 2px !important;
+  background-color: rgba(239, 68, 68, 0.1) !important;
   transition: opacity 0.1s ease !important;
 }
 
@@ -20,6 +21,13 @@ body.dissolve-pick-mode * {
   box-shadow: 0 0 0 4px rgba(99, 179, 237, 0.18) !important;
   opacity: 1 !important;
   transition: outline 0.1s ease, box-shadow 0.1s ease !important;
+  animation: dissolve-select-blink 0.3s ease-out !important;
+}
+
+@keyframes dissolve-select-blink {
+  0% { opacity: 1; }
+  50% { opacity: 0.7; }
+  100% { opacity: 1; }
 }
 
 /* ── UI wrapper ───────────────────────────────────────────────────────────── */
