@@ -1,13 +1,39 @@
 (() => {
   // ─── State ────────────────────────────────────────────────────────────────
   let pickMode = false;
-  let highlighted = null;
-  let hiddenLog = []; // track hidden elements for undo
+  let hoveredEl = null;   // element under cursor (grey preview)
+  let selectedEl = null;  // element locked in by first click (blue outline)
+  let hiddenLog = [];
   const STORAGE_KEY = `dissolve-hidden::${location.hostname}${location.pathname}`;
 
+  // ─── Block ALL interaction during pick mode ───────────────────────────────
+  const BLOCKED_EVENTS = [
+    'click', 'mousedown', 'mouseup',
+    'pointerdown', 'pointerup',
+    'touchstart', 'touchend',
+    'contextmenu',
+  ];
+
+  function blockEvent(e) {
+    if (e.target?.closest('#dissolve-ui')) return; // allow our own UI
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }
+
+  function installBlockers() {
+    BLOCKED_EVENTS.forEach(type =>
+      document.addEventListener(type, blockEvent, { capture: true, passive: false })
+    );
+  }
+
+  function removeBlockers() {
+    BLOCKED_EVENTS.forEach(type =>
+      document.removeEventListener(type, blockEvent, { capture: true })
+    );
+  }
+
   // ─── Overlay piercing ─────────────────────────────────────────────────────
-  // Gets the "real" target even when a transparent overlay sits on top.
-  // Strategy: temporarily pointer-events:none the top element and re-hit-test.
+  // Temporarily disables pointer-events on layers to find the real target
   function deepestTarget(x, y) {
     const MAX_DEPTH = 12;
     const disabled = [];
@@ -16,347 +42,337 @@
     for (let i = 0; i < MAX_DEPTH; i++) {
       const el = document.elementFromPoint(x, y);
       if (!el || el === document.documentElement || el === document.body) break;
-
-      // Skip our own UI
       if (el.closest('#dissolve-ui')) break;
 
-      // If element has meaningful visible content, use it
       const style = getComputedStyle(el);
       const hasContent =
         el.textContent.trim().length > 0 ||
         el.querySelector('img, video, canvas, svg') ||
         style.backgroundImage !== 'none';
 
-      // Accept if it has content OR we've dug deep enough
-      if (hasContent || i >= 3) {
-        target = el;
-        break;
-      }
+      if (hasContent || i >= 3) { target = el; break; }
 
-      // Otherwise pierce through it
       el.style.setProperty('pointer-events', 'none', 'important');
       disabled.push(el);
     }
 
-    // Restore pointer-events
     disabled.forEach(el => el.style.removeProperty('pointer-events'));
-
     return target || document.elementFromPoint(x, y);
   }
 
-  // ─── Highlight ────────────────────────────────────────────────────────────
-  function setHighlight(el) {
-    if (highlighted === el) return;
-    clearHighlight();
+  // ─── Hover grey preview ───────────────────────────────────────────────────
+  function setHovered(el) {
+    if (hoveredEl === el) return;
+    clearHovered();
     if (!el || el.closest('#dissolve-ui')) return;
-    highlighted = el;
-    el.classList.add('dissolve-hover');
+    hoveredEl = el;
+    el.classList.add('dissolve-hovered');
   }
 
-  function clearHighlight() {
-    if (highlighted) {
-      highlighted.classList.remove('dissolve-hover');
-      highlighted = null;
+  function clearHovered() {
+    hoveredEl?.classList.remove('dissolve-hovered');
+    hoveredEl = null;
+  }
+
+  // ─── Selection (first click locks in) ────────────────────────────────────
+  function setSelected(el) {
+    clearSelected();
+    if (!el || el.closest('#dissolve-ui')) return;
+    selectedEl = el;
+    el.classList.remove('dissolve-hovered');
+    el.classList.add('dissolve-selected');
+    document.getElementById('dissolve-bar')?.classList.add('dissolve-bar-ready');
+  }
+
+  function clearSelected() {
+    selectedEl?.classList.remove('dissolve-selected');
+    selectedEl = null;
+    document.getElementById('dissolve-bar')?.classList.remove('dissolve-bar-ready');
+  }
+
+  // ─── iOS two-tap interaction ──────────────────────────────────────────────
+  function onMouseMove(e) {
+    // Only show hover preview when nothing is selected yet
+    if (!selectedEl) {
+      setHovered(deepestTarget(e.clientX, e.clientY));
+    }
+  }
+
+  function onPickClick(e) {
+    const target = deepestTarget(e.clientX, e.clientY);
+    if (!target || target.closest('#dissolve-ui')) return;
+
+    if (!selectedEl) {
+      // First tap: select
+      clearHovered();
+      setSelected(target);
+    } else if (selectedEl === target) {
+      // Second tap on same element: dissolve
+      const toDissolve = selectedEl;
+      clearSelected();
+      dissolveElement(toDissolve);
+    } else {
+      // Tapped something else: reselect
+      clearSelected();
+      setSelected(target);
+    }
+  }
+
+  function onKeyDown(e) {
+    if (e.key === 'Escape') {
+      if (selectedEl) clearSelected();  // first Esc: deselect
+      else exitPickMode();              // second Esc: exit
     }
   }
 
   // ─── Dissolve animation ───────────────────────────────────────────────────
   function dissolveElement(el) {
     if (!el || el.closest('#dissolve-ui')) return;
+    el.classList.remove('dissolve-selected', 'dissolve-hovered');
 
     const rect = el.getBoundingClientRect();
-    const scrollX = window.scrollX;
-    const scrollY = window.scrollY;
 
-    // Remove highlight class before animating
-    el.classList.remove('dissolve-hover');
+    // Element may have zero size (e.g. hidden overlay) — just hide silently
+    if (rect.width < 2 || rect.height < 2) { hideEl(el); return; }
 
-    // Create particle container fixed over the element
+    // Canvas — cap size to avoid massive memory use
+    const MAX_DIM = 1200;
+    const scale = Math.min(1, MAX_DIM / Math.max(rect.width, rect.height));
+    const cw = Math.ceil(rect.width * scale);
+    const ch = Math.ceil(rect.height * scale);
+
     const canvas = document.createElement('canvas');
     canvas.classList.add('dissolve-canvas');
-    canvas.width = rect.width;
-    canvas.height = rect.height;
+    canvas.width = cw;
+    canvas.height = ch;
     canvas.style.cssText = `
-      position: fixed;
-      left: ${rect.left}px;
-      top: ${rect.top}px;
-      width: ${rect.width}px;
-      height: ${rect.height}px;
-      pointer-events: none;
-      z-index: 2147483647;
+      position:fixed;left:${rect.left}px;top:${rect.top}px;
+      width:${rect.width}px;height:${rect.height}px;
+      pointer-events:none;z-index:2147483647;
     `;
     document.body.appendChild(canvas);
 
     const ctx = canvas.getContext('2d');
-    const PARTICLE_SIZE = 4;
-    const cols = Math.ceil(rect.width / PARTICLE_SIZE);
-    const rows = Math.ceil(rect.height / PARTICLE_SIZE);
+    const PS = 5; // particle size
+    const cols = Math.ceil(cw / PS);
+    const rows = Math.ceil(ch / PS);
 
-    // Sample element color via a rendered snapshot approximation
-    // We'll use a gradient of the element's background/brand color
+    // Sample element color
     const elStyle = getComputedStyle(el);
-    const baseColor = elStyle.backgroundColor !== 'rgba(0, 0, 0, 0)'
-      ? elStyle.backgroundColor
-      : elStyle.color !== 'rgba(0, 0, 0, 0)'
-      ? elStyle.color
-      : '#888';
+    const baseColor =
+      elStyle.backgroundColor !== 'rgba(0, 0, 0, 0)' ? elStyle.backgroundColor :
+      elStyle.color !== 'rgba(0, 0, 0, 0)' ? elStyle.color : '#999';
 
-    // Build particles
+    // Build particle grid
     const particles = [];
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         particles.push({
-          x: c * PARTICLE_SIZE,
-          y: r * PARTICLE_SIZE,
-          originX: c * PARTICLE_SIZE,
-          originY: r * PARTICLE_SIZE,
-          vx: (Math.random() - 0.5) * 6,
-          vy: (Math.random() - 0.8) * 8,
-          gravity: 0.18 + Math.random() * 0.12,
+          ox: c * PS, oy: r * PS,
+          x: c * PS,  y: r * PS,
+          vx: (Math.random() - 0.5) * 8,
+          vy: -(Math.random() * 6 + 2),
+          gravity: 0.14 + Math.random() * 0.16,
           alpha: 1,
-          size: PARTICLE_SIZE - 0.5,
-          // Slight color variation per particle
-          hueShift: Math.random() * 40 - 20,
-          delay: Math.random() * 0.3, // stagger start
+          size: PS - 0.5,
+          hue: Math.random() * 60 - 30,
+          delay: Math.random() * 0.28,
         });
       }
     }
 
-    // Hide the actual element immediately (before animation finishes)
-    el.style.setProperty('visibility', 'hidden', 'important');
-    el.style.setProperty('pointer-events', 'none', 'important');
+    // Hide the real element right away
+    hideEl(el);
 
-    // Record for persistence + undo
-    const record = persistHide(el);
-    hiddenLog.push({ el, record });
-
-    // Animate
-    const DURATION = 900; // ms
+    const DURATION = 820;
     const start = performance.now();
 
     function frame(now) {
-      const elapsed = now - start;
-      const t = Math.min(elapsed / DURATION, 1);
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
+      const t = Math.min((now - start) / DURATION, 1);
+      ctx.clearRect(0, 0, cw, ch);
       let alive = false;
+
       for (const p of particles) {
         const pt = Math.max(0, t - p.delay);
+
         if (pt <= 0) {
-          alive = true;
-          // Draw at original position before delay kicks in
+          // Not started yet — draw at origin
           ctx.globalAlpha = 1;
-          drawParticle(ctx, p.originX, p.originY, p.size, baseColor, p.hueShift);
+          ctx.fillStyle = shiftColor(baseColor, p.hue);
+          ctx.beginPath();
+          ctx.roundRect(p.ox, p.oy, p.size, p.size, 1);
+          ctx.fill();
+          alive = true;
           continue;
         }
 
-        p.x = p.originX + p.vx * pt * 60;
-        p.y = p.originY + p.vy * pt * 60 + 0.5 * p.gravity * Math.pow(pt * 60, 2) * 0.1;
-        p.alpha = Math.max(0, 1 - pt * 1.4);
+        const prog = pt * 55;
+        p.x = p.ox + p.vx * prog;
+        p.y = p.oy + p.vy * prog + 0.5 * p.gravity * prog * prog * 0.13;
+        p.alpha = Math.max(0, 1 - pt * 1.5);
 
-        if (p.alpha > 0) {
+        if (p.alpha > 0.01) {
           alive = true;
           ctx.globalAlpha = p.alpha;
-          drawParticle(ctx, p.x, p.y, p.size * (1 - pt * 0.5), baseColor, p.hueShift);
+          const s = p.size * (1 - pt * 0.35);
+          ctx.fillStyle = shiftColor(baseColor, p.hue);
+          ctx.beginPath();
+          ctx.roundRect(p.x, p.y, Math.max(0.5, s), Math.max(0.5, s), 1);
+          ctx.fill();
         }
       }
 
-      if (alive && t < 1) {
-        requestAnimationFrame(frame);
-      } else {
-        canvas.remove();
-      }
+      alive && t < 1 ? requestAnimationFrame(frame) : canvas.remove();
     }
 
     requestAnimationFrame(frame);
-    updateCounter();
   }
 
-  function drawParticle(ctx, x, y, size, baseColor, hueShift) {
-    // Parse base color and apply hue shift
-    ctx.fillStyle = shiftColor(baseColor, hueShift);
-    ctx.beginPath();
-    ctx.roundRect(x, y, size, size, 1);
-    ctx.fill();
-  }
-
-  // Very lightweight color shifter
+  // Lightweight color variation — avoids full HSL parsing
   function shiftColor(color, shift) {
-    // Return a slightly varied version — we fake it with opacity variation
-    // since full HSL parsing is heavy. This still gives nice variation.
-    const el = document.createElement('div');
-    el.style.color = color;
-    document.body.appendChild(el);
-    const computed = getComputedStyle(el).color;
-    el.remove();
+    const tmp = document.createElement('div');
+    tmp.style.color = color;
+    document.body.appendChild(tmp);
+    const c = getComputedStyle(tmp).color;
+    tmp.remove();
+    const m = c.match(/[\d.]+/g);
+    if (!m || m.length < 3) return color;
+    return `rgb(${clamp(+m[0] + shift * 2)},${clamp(+m[1] + shift)},${clamp(+m[2] + shift * 1.5)})`;
+  }
+  function clamp(v) { return Math.min(255, Math.max(0, Math.round(v))); }
 
-    const m = computed.match(/[\d.]+/g);
-    if (!m) return color;
-    const r = Math.min(255, parseInt(m[0]) + shift * 2);
-    const g = Math.min(255, parseInt(m[1]) + shift);
-    const b = Math.min(255, parseInt(m[2]) + shift * 1.5);
-    return `rgb(${r},${g},${b})`;
+  // ─── Hide + persist ───────────────────────────────────────────────────────
+  function hideEl(el) {
+    el.style.setProperty('visibility', 'hidden', 'important');
+    el.style.setProperty('pointer-events', 'none', 'important');
+    const record = persistHide(el);
+    hiddenLog.push({ el, record });
+    updateBadge();
   }
 
-  // ─── Persistence ──────────────────────────────────────────────────────────
-  // Store a CSS selector path so we can re-hide on page reload
   function selectorPath(el) {
     const parts = [];
-    let current = el;
-    while (current && current !== document.documentElement) {
-      let selector = current.tagName.toLowerCase();
-      if (current.id) {
-        selector += `#${current.id}`;
-        parts.unshift(selector);
-        break;
-      }
-      const siblings = Array.from(current.parentNode?.children || [])
-        .filter(s => s.tagName === current.tagName);
-      if (siblings.length > 1) {
-        selector += `:nth-of-type(${siblings.indexOf(current) + 1})`;
-      }
-      parts.unshift(selector);
-      current = current.parentElement;
+    let cur = el;
+    while (cur && cur !== document.documentElement) {
+      let sel = cur.tagName.toLowerCase();
+      if (cur.id) { sel += `#${CSS.escape(cur.id)}`; parts.unshift(sel); break; }
+      const sibs = Array.from(cur.parentNode?.children || []).filter(s => s.tagName === cur.tagName);
+      if (sibs.length > 1) sel += `:nth-of-type(${sibs.indexOf(cur) + 1})`;
+      parts.unshift(sel);
+      cur = cur.parentElement;
     }
     return parts.join(' > ');
   }
 
   function persistHide(el) {
-    const selector = selectorPath(el);
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    if (!stored.includes(selector)) {
-      stored.push(selector);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
-    }
-    return selector;
-  }
-
-  function persistShow(selector) {
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    const updated = stored.filter(s => s !== selector);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    const sel = selectorPath(el);
+    try {
+      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      if (!stored.includes(sel)) { stored.push(sel); localStorage.setItem(STORAGE_KEY, JSON.stringify(stored)); }
+    } catch {}
+    return sel;
   }
 
   function restoreHidden() {
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    stored.forEach(selector => {
-      try {
-        const el = document.querySelector(selector);
-        if (el) {
-          el.style.setProperty('visibility', 'hidden', 'important');
-          el.style.setProperty('pointer-events', 'none', 'important');
-        }
-      } catch {}
-    });
+    try {
+      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      stored.forEach(sel => {
+        try {
+          const el = document.querySelector(sel);
+          if (el) { el.style.setProperty('visibility', 'hidden', 'important'); el.style.setProperty('pointer-events', 'none', 'important'); }
+        } catch {}
+      });
+    } catch {}
   }
 
-  // ─── Undo ─────────────────────────────────────────────────────────────────
-  function undoLast() {
-    const last = hiddenLog.pop();
-    if (!last) return;
-    last.el.style.removeProperty('visibility');
-    last.el.style.removeProperty('pointer-events');
-    persistShow(last.record);
-    updateCounter();
+  function showAll() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      stored.forEach(sel => {
+        try { const el = document.querySelector(sel); if (el) { el.style.removeProperty('visibility'); el.style.removeProperty('pointer-events'); } } catch {}
+      });
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
+    hiddenLog.forEach(({ el }) => { el.style.removeProperty('visibility'); el.style.removeProperty('pointer-events'); });
+    hiddenLog = [];
+    updateBadge();
   }
 
-  // ─── UI ───────────────────────────────────────────────────────────────────
+  // ─── UI bar ───────────────────────────────────────────────────────────────
   function buildUI() {
     if (document.getElementById('dissolve-ui')) return;
-
     const ui = document.createElement('div');
     ui.id = 'dissolve-ui';
     ui.innerHTML = `
       <div id="dissolve-bar">
-        <span id="dissolve-icon">✦</span>
-        <span id="dissolve-label">Click anything to dissolve it</span>
-        <span id="dissolve-counter" class="dissolve-hidden">0 hidden</span>
-        <button id="dissolve-undo" title="Undo last (Z)">↩ Undo</button>
-        <button id="dissolve-done" title="Done (Esc)">Done</button>
+        <button id="d-help-btn" aria-label="Help" title="How to use">?</button>
+        <div id="d-divider"></div>
+        <span id="d-badge" class="d-hidden">0</span>
+        <button id="d-showall">Unhide All</button>
+        <button id="d-done">Done</button>
+      </div>
+      <div id="d-help" class="d-hidden">
+        <div class="d-help-row"><span class="d-key">1st tap</span><span>Select an item — it turns blue</span></div>
+        <div class="d-help-row"><span class="d-key">2nd tap</span><span>Dissolve it away ✦</span></div>
+        <div class="d-help-row"><span class="d-key">Other tap</span><span>Change selection</span></div>
+        <div class="d-help-row"><span class="d-key">Esc</span><span>Deselect / Exit</span></div>
+        <p class="d-note">Hidden items are remembered next time you visit this page.</p>
       </div>
     `;
     document.body.appendChild(ui);
 
-    document.getElementById('dissolve-done').addEventListener('click', exitPickMode);
-    document.getElementById('dissolve-undo').addEventListener('click', undoLast);
+    document.getElementById('d-done').addEventListener('click', exitPickMode);
+    document.getElementById('d-showall').addEventListener('click', showAll);
+    document.getElementById('d-help-btn').addEventListener('click', () => {
+      const panel = document.getElementById('d-help');
+      const btn = document.getElementById('d-help-btn');
+      const isOpen = !panel.classList.contains('d-hidden');
+      panel.classList.toggle('d-hidden', isOpen);
+      btn.classList.toggle('d-help-active', !isOpen);
+    });
   }
 
-  function destroyUI() {
-    document.getElementById('dissolve-ui')?.remove();
+  function destroyUI() { document.getElementById('dissolve-ui')?.remove(); }
+
+  function updateBadge() {
+    const badge = document.getElementById('d-badge');
+    if (!badge) return;
+    badge.textContent = hiddenLog.length;
+    badge.classList.toggle('d-hidden', hiddenLog.length === 0);
   }
 
-  function updateCounter() {
-    const counter = document.getElementById('dissolve-counter');
-    if (!counter) return;
-    const count = hiddenLog.length;
-    counter.textContent = `${count} hidden`;
-    counter.classList.toggle('dissolve-hidden', count === 0);
-  }
-
-  // ─── Pick mode ────────────────────────────────────────────────────────────
+  // ─── Pick mode lifecycle ──────────────────────────────────────────────────
   function enterPickMode() {
     if (pickMode) return;
     pickMode = true;
     document.body.classList.add('dissolve-pick-mode');
     buildUI();
     document.addEventListener('mousemove', onMouseMove, true);
-    document.addEventListener('click', onClick, true);
+    document.addEventListener('click', onPickClick, true);
     document.addEventListener('keydown', onKeyDown, true);
+    installBlockers();
   }
 
   function exitPickMode() {
     if (!pickMode) return;
     pickMode = false;
     document.body.classList.remove('dissolve-pick-mode');
-    clearHighlight();
+    removeBlockers();
+    clearHovered();
+    clearSelected();
     destroyUI();
     document.removeEventListener('mousemove', onMouseMove, true);
-    document.removeEventListener('click', onClick, true);
+    document.removeEventListener('click', onPickClick, true);
     document.removeEventListener('keydown', onKeyDown, true);
   }
 
-  function onMouseMove(e) {
-    const target = deepestTarget(e.clientX, e.clientY);
-    setHighlight(target);
-  }
-
-  function onClick(e) {
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    const target = deepestTarget(e.clientX, e.clientY);
-    if (target && !target.closest('#dissolve-ui')) {
-      dissolveElement(target);
-    }
-  }
-
-  function onKeyDown(e) {
-    if (e.key === 'Escape') exitPickMode();
-    if ((e.key === 'z' || e.key === 'Z') && !e.ctrlKey && !e.metaKey) undoLast();
-  }
-
-  // ─── Message bridge from popup/background ────────────────────────────────
+  // ─── Message bridge ───────────────────────────────────────────────────────
   chrome.runtime.onMessage.addListener((msg) => {
-    if (msg.action === 'togglePickMode') {
-      pickMode ? exitPickMode() : enterPickMode();
-    }
-    if (msg.action === 'showAll') {
-      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-      stored.forEach(selector => {
-        try {
-          const el = document.querySelector(selector);
-          if (el) {
-            el.style.removeProperty('visibility');
-            el.style.removeProperty('pointer-events');
-          }
-        } catch {}
-      });
-      localStorage.removeItem(STORAGE_KEY);
-      hiddenLog = [];
-    }
+    if (msg.action === 'togglePickMode') pickMode ? exitPickMode() : enterPickMode();
+    if (msg.action === 'showAll') showAll();
   });
 
-  // ─── Auto-restore on load ─────────────────────────────────────────────────
+  // ─── Auto-restore on page load ────────────────────────────────────────────
   restoreHidden();
 
 })();

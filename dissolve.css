@@ -2,134 +2,207 @@
 body.dissolve-pick-mode,
 body.dissolve-pick-mode * {
   cursor: crosshair !important;
+  user-select: none !important;
 }
 
-/* ── Hover highlight ──────────────────────────────────────────────────────── */
-.dissolve-hover {
-  outline: 2px solid rgba(99, 179, 237, 0.9) !important;
+/* ── Hover grey preview ───────────────────────────────────────────────────── */
+.dissolve-hovered {
+  opacity: 0.45 !important;
+  outline: 1px dashed rgba(150, 150, 150, 0.6) !important;
+  outline-offset: 1px !important;
+  transition: opacity 0.1s ease !important;
+}
+
+/* ── Selected state (first tap) ───────────────────────────────────────────── */
+.dissolve-selected {
+  outline: 2px solid #63b3ed !important;
   outline-offset: 2px !important;
-  background-color: rgba(99, 179, 237, 0.08) !important;
-  transition: outline 0.08s ease, background-color 0.08s ease !important;
-  border-radius: 3px !important;
+  box-shadow: 0 0 0 4px rgba(99, 179, 237, 0.18) !important;
+  opacity: 1 !important;
+  transition: outline 0.1s ease, box-shadow 0.1s ease !important;
 }
 
-/* ── UI bar ───────────────────────────────────────────────────────────────── */
+/* ── UI wrapper ───────────────────────────────────────────────────────────── */
 #dissolve-ui {
   position: fixed;
-  bottom: 24px;
+  top: 16px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 2147483646;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
   pointer-events: none;
-  animation: dissolve-bar-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: d-drop-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
-@keyframes dissolve-bar-in {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(16px) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0) scale(1);
-  }
+@keyframes d-drop-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-10px) scale(0.95); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0)     scale(1);    }
 }
 
+/* ── Main bar ─────────────────────────────────────────────────────────────── */
 #dissolve-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  background: rgba(15, 15, 20, 0.92);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(16, 16, 22, 0.93);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 100px;
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.4),
-    0 2px 8px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06);
   pointer-events: all;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  color: rgba(255,255,255,0.85);
   white-space: nowrap;
   user-select: none;
 }
 
-#dissolve-icon {
-  font-size: 14px;
-  color: #63b3ed;
-  animation: dissolve-pulse 2s ease-in-out infinite;
+#d-divider {
+  width: 1px;
+  height: 14px;
+  background: rgba(255,255,255,0.12);
+  margin: 0 2px;
 }
 
-@keyframes dissolve-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.6; transform: scale(0.85); }
-}
-
-#dissolve-label {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 12px;
-  letter-spacing: 0.01em;
-}
-
-#dissolve-counter {
-  background: rgba(99, 179, 237, 0.2);
+/* Badge showing count of hidden items */
+#d-badge {
+  background: rgba(99, 179, 237, 0.22);
   color: #90cdf4;
-  border: 1px solid rgba(99, 179, 237, 0.3);
+  border: 1px solid rgba(99, 179, 237, 0.35);
   border-radius: 100px;
-  padding: 2px 9px;
-  font-size: 11px;
+  padding: 1px 7px;
+  font-size: 10px;
   font-weight: 600;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.2s;
 }
 
-#dissolve-counter.dissolve-hidden {
-  opacity: 0;
-  pointer-events: none;
+#d-badge.d-hidden {
+  display: none;
 }
 
-#dissolve-undo,
-#dissolve-done {
+/* Shared button base */
+#dissolve-bar button {
   border: none;
-  border-radius: 100px;
-  padding: 5px 13px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
+  background: transparent;
   font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 100px;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+  color: rgba(255,255,255,0.7);
+  line-height: 1;
 }
 
-#dissolve-undo {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+#dissolve-bar button:hover {
+  background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.95);
 }
 
-#dissolve-undo:hover {
-  background: rgba(255, 255, 255, 0.14);
-  color: rgba(255, 255, 255, 0.95);
+#dissolve-bar button:active {
+  transform: scale(0.95);
 }
 
-#dissolve-done {
-  background: #63b3ed;
-  color: #0f0f14;
+/* Help button */
+#d-help-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: rgba(255,255,255,0.4) !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#d-help-btn.d-help-active {
+  background: rgba(99, 179, 237, 0.2) !important;
+  color: #90cdf4 !important;
+  border-color: rgba(99, 179, 237, 0.4) !important;
+}
+
+/* Done button — primary */
+#d-done {
+  background: #63b3ed !important;
+  color: #0f0f16 !important;
+  font-weight: 600 !important;
+  padding: 4px 12px !important;
+}
+
+#d-done:hover {
+  background: #90cdf4 !important;
+}
+
+/* Bar pulses subtly when an item is selected */
+#dissolve-bar.dissolve-bar-ready {
+  border-color: rgba(99, 179, 237, 0.4);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35), 0 0 0 1px rgba(99,179,237,0.25), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+/* ── Help panel ───────────────────────────────────────────────────────────── */
+#d-help {
+  background: rgba(16, 16, 22, 0.95);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 12px;
+  padding: 12px 14px;
+  pointer-events: all;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  color: rgba(255,255,255,0.75);
+  min-width: 230px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+  animation: d-fade-in 0.18s ease both;
+}
+
+@keyframes d-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+#d-help.d-hidden { display: none; }
+
+.d-help-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.d-help-row:last-of-type { border-bottom: none; }
+
+.d-key {
+  font-size: 10px;
   font-weight: 600;
+  color: #90cdf4;
+  background: rgba(99,179,237,0.12);
+  border: 1px solid rgba(99,179,237,0.25);
+  border-radius: 4px;
+  padding: 1px 6px;
+  white-space: nowrap;
+  min-width: 62px;
+  text-align: center;
 }
 
-#dissolve-done:hover {
-  background: #90cdf4;
-  transform: scale(1.03);
+.d-note {
+  margin-top: 8px;
+  font-size: 10px;
+  color: rgba(255,255,255,0.3);
+  line-height: 1.4;
 }
 
-#dissolve-done:active {
-  transform: scale(0.98);
-}
-
-/* Canvas particles sit above everything */
+/* ── Canvas (particles) ───────────────────────────────────────────────────── */
 .dissolve-canvas {
-  z-index: 2147483647;
   pointer-events: none;
+  z-index: 2147483647;
 }
