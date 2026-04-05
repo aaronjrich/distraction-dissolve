@@ -68,14 +68,17 @@
       // Detect structural/layout containers by class name patterns
       const classStr = (el.className || '').toLowerCase();
       const tagStr = (el.tagName || '').toLowerCase();
-      const containerKeywords = ['page', 'feed', 'wrapper', 'container', 'structure', 'provider', 'root', 'grid', 'layout', 'block', 'site'];
+      const containerKeywords = ['page', 'feed', 'wrapper', 'container', 'structure', 'provider', 'root', 'grid', 'layout', 'block', 'site', 'app', 'flex', 'main', 'aside'];
+      const adKeywords = ['ad', 'advertisement', 'sponsor', 'promoted'];
       const isStructural = containerKeywords.some(kw => classStr.includes(kw) || tagStr.includes(kw));
+      const isAdSlot = adKeywords.some(kw => classStr.includes(kw));
       
-      // Skip structural containers unless they're small or interactive
+      // Skip structural containers and ad slots unless they're small or interactive
       const isLargeStructural = isStructural && rect.width > vpW * 0.3 && !isInteractive;
+      const isLargeAdSlot = isAdSlot && rect.width > 300 && !isInteractive;
 
       // Accept if interactive, or has content and not structural, or we've dug deep enough
-      if (isInteractive || (hasContent && !isLargeStructural) || i >= 15) {
+      if (isInteractive || (hasContent && !isLargeStructural && !isLargeAdSlot) || i >= 15) {
         target = el;
         break;
       }
