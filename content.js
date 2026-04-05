@@ -350,7 +350,7 @@
         <div class="d-help-row"><span class="d-key">1st tap</span><span>Select an item — it turns blue</span></div>
         <div class="d-help-row"><span class="d-key">2nd tap</span><span>Dissolve it away ✦</span></div>
         <div class="d-help-row"><span class="d-key">Other tap</span><span>Change selection</span></div>
-        <div class="d-help-row"><span class="d-key">p: 8px; width: 100%; padding: 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); cursor: pointer; font-size: 12px;">Debug Mode: OFF</button>
+        <button id="d-debug-toggle" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); cursor: pointer; font-size: 12px;">Debug Mode: OFF</button>
         <p class="d-note">Hidden items are remembered next time you visit this page.</p>
       </div>
     `;
