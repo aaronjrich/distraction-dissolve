@@ -4,6 +4,7 @@
   let hoveredEl = null;   // element under cursor (grey preview)
   let selectedEl = null;  // element locked in by first click (blue outline)
   let hiddenLog = [];
+  let debugMode = localStorage.getItem('dissolve-debug') === 'true';
   const STORAGE_KEY = `dissolve-hidden::${location.hostname}${location.pathname}`;
 
   // ─── Block ALL interaction during pick mode ───────────────────────────────
@@ -117,7 +118,11 @@
   // ─── iOS two-tap interaction ──────────────────────────────────────────────
   function onMouseMove(e) {
     // Only show hover preview when nothing is selected yet
-    if (!selectedEl) {
+    ifconst target = deepestTarget(e.clientX, e.clientY);
+      if (debugMode) {
+        console.log('Hovered target:', target?.tagName, target?.className, target?.id, 'size:', target?.getBoundingClientRect().width + 'x' + target?.getBoundingClientRect().height);
+      }
+      setHovered(target
       setHovered(deepestTarget(e.clientX, e.clientY));
     }
   }
@@ -142,6 +147,12 @@
     }
   }
 
+    // Ctrl+Shift+D to toggle debug mode
+    if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+      debugMode = !debugMode;
+      localStorage.setItem('dissolve-debug', debugMode);
+      console.log('Dissolve debug mode:', debugMode ? 'ON' : 'OFF');
+    }
   function onKeyDown(e) {
     if (e.key === 'Escape') {
       if (selectedEl) clearSelected();  // first Esc: deselect
@@ -341,6 +352,7 @@
         <div class="d-help-row"><span class="d-key">Other tap</span><span>Change selection</span></div>
         <div class="d-help-row"><span class="d-key">Shift+click</span><span>Pierce deeper overlays</span></div>
         <div class="d-help-row"><span class="d-key">Esc</span><span>Deselect / Exit</span></div>
+        <div class="d-help-row"><span class="d-key">Ctrl+Shift+D</span><span>Toggle debug logging</span></div>
         <p class="d-note">Hidden items are remembered next time you visit this page.</p>
       </div>
     `;
