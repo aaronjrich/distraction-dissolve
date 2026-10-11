@@ -1,8 +1,8 @@
 (() => {
   // ─── State ────────────────────────────────────────────────────────────────
   let pickMode = false;
-  let hoveredEl = null;   // element under cursor (grey preview)
-  let selectedEl = null;  // element locked in by first click (blue outline)
+  let hoveredEl = null;   // element under cursor (red preview)
+  let selectedEl = null;  // element locked in by first click (green outline)
   let hiddenLog = [];
   let debugMode = localStorage.getItem('dissolve-debug') === 'true';
   const STORAGE_KEY = `dissolve-hidden::${location.hostname}${location.pathname}`;
@@ -33,78 +33,160 @@
     );
   }
 
-  // ─── Overlay piercing ─────────────────────────────────────────────────────
-  // Temporarily disables pointer-events on layers to find the real target
-  function deepestTarget(x, y) {
-    const MAX_DEPTH = 20;
-    const disabled = [];
-    let target = null;
+  // ─── Picking ──────────────────────────────────────────────────────────────
+  // Start from the innermost visible thing under the cursor, then keep its
+  // ancestors as a chain the user can grow or shrink with [ and ].
+  const POPUP_MAX_FRACTION = 0.8; // popups bigger than this share of the viewport are not auto-picked
+  const REPLACED_TAGS = new Set(['img', 'video', 'canvas', 'svg', 'picture', 'iframe', 'input', 'select', 'textarea', 'button', 'embed', 'object']);
+  const INLINE_TAGS = new Set(['span', 'b', 'i', 'em', 'strong', 'small', 'u', 'mark', 'code', 'abbr', 'sub', 'sup', 'font']);
+  const POPUP_TOKENS = new Set([
+    'modal', 'popup', 'popover', 'dialog', 'lightbox', 'cookie', 'cookies', 'consent',
+    'newsletter', 'interstitial', 'toast', 'snackbar',
+    'ad', 'ads', 'advert', 'advertisement', 'sponsor', 'sponsored',
+  ]);
 
-    try {
-    for (let i = 0; i < MAX_DEPTH; i++) {
-      const el = document.elementFromPoint(x, y);
-      if (!el || el === document.documentElement || el === document.body) break;
-      if (el.closest('#dissolve-ui')) break;
+  let chain = [];          // candidate elements, innermost first
+  let chainIdx = 0;        // which candidate is highlighted
+  let chainStart = null;   // the innermost element the chain was built from
+  let levelAdjusted = false;
 
-      // Never select structural elements
-      if (el.tagName === 'HTML' || el.tagName === 'BODY') break;
-
-      const style = getComputedStyle(el);
-      const rect = el.getBoundingClientRect();
-      
-      const vpW = window.innerWidth;
-      const vpH = window.innerHeight;
-      const hasContent =
-        el.textContent.trim().length > 0 ||
-        el.querySelector('img, video, canvas, svg') ||
-        style.backgroundImage !== 'none';
-
-      // Check if element is interactive
-      const isInteractive = el.tagName === 'BUTTON' || el.tagName === 'A' || 
-                            el.tagName === 'INPUT' || el.tagName === 'SELECT' ||
-                            el.getAttribute('role') === 'button' ||
-                            el.getAttribute('role') === 'link' ||
-                            style.cursor === 'pointer';
-
-      // Detect structural/layout containers by class name patterns
-      const classStr = (el.getAttribute('class') || '').toLowerCase();
-      const tagStr = (el.tagName || '').toLowerCase();
-      const containerKeywords = ['page', 'feed', 'wrapper', 'container', 'structure', 'provider', 'root', 'grid', 'layout', 'block', 'site', 'app', 'flex', 'main', 'aside'];
-      const adKeywords = ['ad', 'advertisement', 'sponsor', 'promoted'];
-      const isStructural = containerKeywords.some(kw => classStr.includes(kw) || tagStr.includes(kw));
-      const isAdSlot = adKeywords.some(kw => classStr.includes(kw));
-      
-      // Skip structural containers and ad slots unless they're small or interactive
-      const isLargeStructural = isStructural && rect.width > vpW * 0.3 && !isInteractive;
-      const isLargeAdSlot = isAdSlot && rect.width > 300 && !isInteractive;
-
-      // Accept if interactive, or has content and not structural, or we've dug deep enough
-      if (isInteractive || (hasContent && !isLargeStructural && !isLargeAdSlot) || i >= 15) {
-        target = el;
-        break;
-      }
-
-      el.style.setProperty('pointer-events', 'none', 'important');
-      disabled.push(el);
-    }
-    } finally {
-      disabled.forEach(el => el.style.removeProperty('pointer-events'));
-    }
-    return target || document.elementFromPoint(x, y);
+  // Whole-token class matching, so "header" never matches "ad"
+  function classTokens(el) {
+    const raw = el.getAttribute('class') || '';
+    return raw.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
   }
 
-  // ─── Hover grey preview ───────────────────────────────────────────────────
+  function isTransparent(color) {
+    return color === 'transparent' || /^rgba\(.*,\s*0\)$/.test(color);
+  }
+
+  // Skips invisible click-catching layers that sit on top of the real content
+  function looksVisible(el) {
+    if (REPLACED_TAGS.has(el.tagName.toLowerCase())) return true;
+    const cs = getComputedStyle(el);
+    if (cs.visibility === 'hidden' || parseFloat(cs.opacity) === 0) return false;
+    if (cs.backgroundImage !== 'none' || !isTransparent(cs.backgroundColor)) return true;
+    for (const n of el.childNodes) {
+      if (n.nodeType === 3 && n.nodeValue.trim()) return true;
+    }
+    return false;
+  }
+
+  function baseElementAt(x, y) {
+    const stack = document.elementsFromPoint(x, y);
+    if (!stack.length || stack[0].closest('#dissolve-ui')) return null;
+    let found = null;
+    for (const el of stack) {
+      if (el === document.documentElement || el === document.body) break;
+      if (looksVisible(el)) { found = el; break; }
+    }
+    // Pick the whole <svg>, not a path inside it
+    while (found?.ownerSVGElement) found = found.ownerSVGElement;
+    return found;
+  }
+
+  function sameBox(a, b) {
+    return Math.abs(a.left - b.left) < 3 && Math.abs(a.top - b.top) < 3 &&
+           Math.abs(a.right - b.right) < 3 && Math.abs(a.bottom - b.bottom) < 3;
+  }
+
+  function buildChain(start) {
+    const out = [];
+    let lastRect = null;
+    for (let cur = start; cur && cur !== document.body && cur !== document.documentElement; cur = cur.parentElement) {
+      const rect = cur.getBoundingClientRect();
+      // A wrapper with the same box as its child adds nothing; keep the outer one
+      if (lastRect && sameBox(rect, lastRect)) out[out.length - 1] = cur;
+      else out.push(cur);
+      lastRect = rect;
+    }
+    return out;
+  }
+
+  // A box that floats over the page: dialog, cookie banner, corner widget, ad slot
+  function isPopupLike(el) {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 40 || rect.height < 20) return false;
+    if (rect.width > vw * POPUP_MAX_FRACTION || rect.height > vh * POPUP_MAX_FRACTION) return false;
+    const role = el.getAttribute('role');
+    if (el.tagName === 'DIALOG' || role === 'dialog' || role === 'alertdialog' || el.getAttribute('aria-modal') === 'true') return true;
+    if (getComputedStyle(el).position === 'fixed') return true;
+    return classTokens(el).some(t => POPUP_TOKENS.has(t));
+  }
+
+  function defaultIndex(list) {
+    let i = 0;
+    // Text-level tags (span, b, em...) are never the item you mean, so go to their parent
+    while (i < list.length - 1 && INLINE_TAGS.has(list[i].tagName.toLowerCase())) i++;
+    // If the item sits inside a popup, prefer the whole popup (outermost one that fits)
+    let popup = -1;
+    for (let j = i; j < list.length; j++) if (isPopupLike(list[j])) popup = j;
+    return popup >= 0 ? popup : i;
+  }
+
+  function refreshChain(x, y) {
+    const start = baseElementAt(x, y);
+    if (!start) { chain = []; chainStart = null; return false; }
+    if (start !== chainStart) {
+      chainStart = start;
+      chain = buildChain(start);
+      chainIdx = defaultIndex(chain);
+    }
+    return chain.length > 0;
+  }
+
+  function resetChain() { chain = []; chainStart = null; levelAdjusted = false; }
+
+  function adjustLevel(delta) {
+    if (!chain.length) return;
+    const next = Math.max(0, Math.min(chain.length - 1, chainIdx + delta));
+    if (next === chainIdx) return;
+    chainIdx = next;
+    if (selectedEl) { setSelected(chain[chainIdx]); levelAdjusted = true; }
+    else setHovered(chain[chainIdx]);
+  }
+
+  function pointInside(el, x, y) {
+    const r = el.getBoundingClientRect();
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  }
+
+  // ─── Size label ───────────────────────────────────────────────────────────
+  function showLabel(el) {
+    const label = document.getElementById('dissolve-label');
+    if (!label || !el) return;
+    const r = el.getBoundingClientRect();
+    const cls = (el.getAttribute('class') || '').split(/\s+/).find(c => c && !c.startsWith('dissolve-'));
+    let text = `${el.tagName.toLowerCase()}${cls ? '.' + cls : ''}`;
+    if (text.length > 36) text = text.slice(0, 35) + '…';
+    label.textContent = `${text}  ${Math.round(r.width)}×${Math.round(r.height)}`;
+    label.style.display = 'block';
+    const top = r.top >= 28 ? r.top - 26 : Math.min(r.bottom + 4, window.innerHeight - 26);
+    label.style.top = `${top}px`;
+    label.style.left = `${Math.max(4, Math.min(r.left, window.innerWidth - label.offsetWidth - 4))}px`;
+  }
+
+  function hideLabel() {
+    const label = document.getElementById('dissolve-label');
+    if (label) label.style.display = 'none';
+  }
+
+  // ─── Hover preview ────────────────────────────────────────────────────────
   function setHovered(el) {
     if (hoveredEl === el) return;
     clearHovered();
     if (!el || el.closest('#dissolve-ui')) return;
     hoveredEl = el;
     el.classList.add('dissolve-hovered');
+    showLabel(el);
   }
 
   function clearHovered() {
     hoveredEl?.classList.remove('dissolve-hovered');
     hoveredEl = null;
+    if (!selectedEl) hideLabel();
   }
 
   // ─── Selection (first click locks in) ────────────────────────────────────
@@ -115,59 +197,76 @@
     el.classList.remove('dissolve-hovered');
     el.classList.add('dissolve-selected');
     document.getElementById('dissolve-bar')?.classList.add('dissolve-bar-ready');
+    showLabel(el);
   }
 
   function clearSelected() {
     selectedEl?.classList.remove('dissolve-selected');
     selectedEl = null;
+    levelAdjusted = false;
     document.getElementById('dissolve-bar')?.classList.remove('dissolve-bar-ready');
+    hideLabel();
   }
 
-  // ─── iOS two-tap interaction ──────────────────────────────────────────────
+  // ─── Two-click interaction ────────────────────────────────────────────────
   function onMouseMove(e) {
     // Only show hover preview when nothing is selected yet
-    if (!selectedEl) {
-      const target = deepestTarget(e.clientX, e.clientY);
-      if (debugMode) {
-        console.log('Hovered target:', target?.tagName, target?.className, target?.id, 'size:', target?.getBoundingClientRect().width + 'x' + target?.getBoundingClientRect().height);
-      }
-      setHovered(target);
+    if (selectedEl) return;
+    if (!refreshChain(e.clientX, e.clientY)) { clearHovered(); return; }
+    const target = chain[chainIdx];
+    if (debugMode && target !== hoveredEl) {
+      const r = target.getBoundingClientRect();
+      console.log('Hovered target:', target.tagName, target.getAttribute('class'), target.id, 'size:', r.width + 'x' + r.height, 'level:', chainIdx + 1 + '/' + chain.length);
     }
+    setHovered(target);
   }
 
   function onPickClick(e) {
-    const target = deepestTarget(e.clientX, e.clientY, e.shiftKey);
-    if (!target || target.closest('#dissolve-ui')) return;
+    if (e.target?.closest?.('#dissolve-ui')) return;
+    const found = refreshChain(e.clientX, e.clientY);
 
-    if (!selectedEl) {
-      // First tap: select
-      clearHovered();
-      setSelected(target);
-    } else if (selectedEl === target) {
-      // Second tap on same element: dissolve
+    // Second click on the selected item (or anywhere inside it after resizing): dissolve
+    if (selectedEl && ((found && chain[chainIdx] === selectedEl) ||
+        (levelAdjusted && pointInside(selectedEl, e.clientX, e.clientY)))) {
       const toDissolve = selectedEl;
       clearSelected();
+      resetChain();
       dissolveElement(toDissolve);
-    } else {
-      // Tapped something else: reselect
-      clearSelected();
-      setSelected(target);
+      return;
     }
+
+    if (!found) return;
+    // First click, or clicked something else: (re)select
+    clearHovered();
+    setSelected(chain[chainIdx]);
   }
 
   function onKeyDown(e) {
     if (e.key === 'Escape') {
       if (selectedEl) clearSelected();  // first Esc: deselect
       else exitPickMode();              // second Esc: exit
+    } else if (e.key === '[') {
+      e.preventDefault();
+      adjustLevel(-1);
+    } else if (e.key === ']') {
+      e.preventDefault();
+      adjustLevel(1);
     }
+  }
+
+  let lastWheel = 0;
+  function onWheel(e) {
+    if (!e.shiftKey) return; // plain scrolling still works in pick mode
+    e.preventDefault();
+    const now = performance.now();
+    if (now - lastWheel < 120) return;
+    lastWheel = now;
+    adjustLevel((e.deltaY || e.deltaX) < 0 ? 1 : -1);
   }
 
   function onContextMenu(e) {
     e.preventDefault();
-    if (selectedEl) {
-      clearSelected();
-      document.getElementById('dissolve-bar')?.classList.remove('dissolve-bar-ready');
-    }
+    clearSelected();
   }
 
   // ─── Dissolve animation ───────────────────────────────────────────────────
@@ -360,6 +459,7 @@
         <div class="d-help-row"><span class="d-key">1st tap</span><span>Select an item — it turns green</span></div>
         <div class="d-help-row"><span class="d-key">2nd tap</span><span>Dissolve it away ✦</span></div>
         <div class="d-help-row"><span class="d-key">Other tap</span><span>Change selection</span></div>
+        <div class="d-help-row"><span class="d-key">[ &nbsp;]</span><span>Pick a smaller or larger piece (or Shift+scroll)</span></div>
         <div class="d-help-row"><span class="d-key">Right-click</span><span>Deselect current item</span></div>
         <div class="d-help-row"><span class="d-key">Esc</span><span>Deselect or exit mode</span></div>
         <button id="d-debug-toggle" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); cursor: pointer; font-size: 12px;">Debug Mode: OFF</button>
@@ -367,6 +467,12 @@
       </div>
     `;
     document.body.appendChild(ui);
+
+    // Lives outside #dissolve-ui because that wrapper is transformed, which would
+    // break position: fixed
+    const label = document.createElement('div');
+    label.id = 'dissolve-label';
+    document.body.appendChild(label);
 
     document.getElementById('d-done').addEventListener('click', exitPickMode);
     document.getElementById('d-showall').addEventListener('click', showAll);
@@ -395,7 +501,10 @@
     });
   }
 
-  function destroyUI() { document.getElementById('dissolve-ui')?.remove(); }
+  function destroyUI() {
+    document.getElementById('dissolve-ui')?.remove();
+    document.getElementById('dissolve-label')?.remove();
+  }
 
   function updateBadge() {
     const badge = document.getElementById('d-badge');
@@ -414,6 +523,7 @@
     document.addEventListener('click', onPickClick, true);
     document.addEventListener('contextmenu', onContextMenu, true);
     document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('wheel', onWheel, { capture: true, passive: false });
     installBlockers();
   }
 
@@ -429,6 +539,8 @@
     document.removeEventListener('click', onPickClick, true);
     document.removeEventListener('contextmenu', onContextMenu, true);
     document.removeEventListener('keydown', onKeyDown, true);
+    document.removeEventListener('wheel', onWheel, { capture: true });
+    resetChain();
   }
 
   // ─── Message bridge ───────────────────────────────────────────────────────
