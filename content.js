@@ -5,8 +5,7 @@
   let selectedEl = null;  // element locked in by first click (green outline)
   let hiddenLog = [];
   let lastMouse = null;   // last pointer position, to refresh the hover after a scroll
-  let debugMode = localStorage.getItem('dissolve-debug') === 'true';
-  const STORAGE_KEY = `dissolve-hidden::${location.hostname}${location.pathname}`;
+  let debugMode = false;  // loaded from chrome.storage.local at startup
 
   // ─── Block ALL interaction during pick mode ───────────────────────────────
   const BLOCKED_EVENTS = [
@@ -707,22 +706,130 @@
   }
   function clamp(v) { return Math.min(255, Math.max(0, Math.round(v))); }
 
-  // ─── Hide + persist ───────────────────────────────────────────────────────
-  function hideEl(el) {
+  // ─── Hide + remember ──────────────────────────────────────────────────────
+  // Hidden items are saved per page in chrome.storage.local (not the site's own
+  // localStorage). Each record holds a selector path plus a fingerprint (tag,
+  // stable classes and id, size, text), so an item can still be found when the
+  // site's layout shifts. Matching is retried for a while after load because
+  // many sites draw their content late.
+  const WATCH_MS = 12000;
+  let pageKey = '';           // host + path the records belong to
+  let records = [];           // { sel, fp } for this page
+  const matched = new Map();  // record -> element currently hidden for it
+  let observer = null;
+  let watchTimer = null;
+  let applyTimer = null;
+
+  const pageId = () => `${location.hostname}${location.pathname}`;
+
+  function applyHide(el) {
     el.style.setProperty('display', 'none', 'important');
     el.style.setProperty('pointer-events', 'none', 'important');
-    const record = persistHide(el);
+  }
+
+  function unapplyHide(el) {
+    el.style.removeProperty('display');
+    el.style.removeProperty('pointer-events');
+  }
+
+  function hideEl(el) {
+    const record = persistHide(el); // fingerprint first, while it still has a size
+    applyHide(el);
     hiddenLog.push({ el, record });
     updateBadge();
   }
 
+  // ─── Fingerprint ──────────────────────────────────────────────────────────
+  // Generated ids and class names (ad frames, CSS-in-JS hashes) change on every
+  // load, so they are left out
+  function stableId(el) {
+    const id = el.id || '';
+    if (!id || id.length > 60 || /\d{3,}/.test(id) || /^(:r|ember|react|google_ads|aswift|gpt)/i.test(id)) return '';
+    return id;
+  }
+
+  function stableClasses(el) {
+    return (el.getAttribute('class') || '').split(/\s+/).filter(c =>
+      c && c.length <= 40 && !c.startsWith('dissolve-') && !/\d{3,}/.test(c) &&
+      !/^(css|sc|jsx|svelte|emotion)-/i.test(c) && !/^(?=.*\d)(?=.*[a-z])[a-z0-9]{6,}$/i.test(c));
+  }
+
+  function textHint(el) {
+    return (el.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+  }
+
+  function fingerprint(el) {
+    const r = el.getBoundingClientRect();
+    return {
+      tag: el.tagName.toLowerCase(),
+      id: stableId(el),
+      cls: stableClasses(el).slice(0, 6),
+      w: Math.round(r.width),
+      h: Math.round(r.height),
+      text: textHint(el),
+    };
+  }
+
+  function score(el, fp) {
+    let s = 0;
+    if (fp.id && stableId(el) === fp.id) s += 0.5;
+    const cls = stableClasses(el);
+    if (fp.cls.length && cls.length) {
+      const common = fp.cls.filter(c => cls.includes(c)).length;
+      s += (0.3 * common) / (fp.cls.length + cls.length - common);
+    }
+    if (fp.text) {
+      const t = textHint(el);
+      if (t === fp.text) s += 0.3;
+      else if (t && (t.startsWith(fp.text.slice(0, 30)) || fp.text.startsWith(t.slice(0, 30)))) s += 0.15;
+    }
+    const r = el.getBoundingClientRect();
+    if (fp.w && Math.abs(r.width - fp.w) <= fp.w * 0.15 && Math.abs(r.height - fp.h) <= fp.h * 0.15) s += 0.2;
+    return s;
+  }
+
+  // Cheap test run before the (slower) scoring
+  function passesGate(el, fp) {
+    if (!fp.id && !fp.cls.length) return true;
+    if (fp.id && stableId(el) === fp.id) return true;
+    const cls = stableClasses(el);
+    return fp.cls.some(c => cls.includes(c));
+  }
+
+  function bestByFingerprint(fp, taken) {
+    let best = null;
+    let bestScore = 0;
+    const pool = document.getElementsByTagName(fp.tag);
+    const limit = Math.min(pool.length, 4000);
+    for (let i = 0; i < limit; i++) {
+      const el = pool[i];
+      if (taken.has(el) || el.closest('#dissolve-ui') || !passesGate(el, fp)) continue;
+      const s = score(el, fp);
+      if (s > bestScore) { best = el; bestScore = s; }
+    }
+    return bestScore >= 0.5 ? best : null;
+  }
+
+  function findMatch(rec, taken) {
+    const byPath = queryPath(rec.sel);
+    const fp = rec.fp;
+    if (byPath && !taken.has(byPath)) {
+      if (!fp) return byPath; // migrated from 1.0.11: a path is all there is
+      if (byPath.tagName.toLowerCase() === fp.tag &&
+          ((!fp.id && !fp.cls.length && !fp.text) || score(byPath, fp) >= 0.2)) return byPath;
+    }
+    return fp ? bestByFingerprint(fp, taken) : null;
+  }
+
+  // ─── Selector path ────────────────────────────────────────────────────────
   // Path inside one tree (the document, or a single shadow root)
   function pathInTree(el) {
     const parts = [];
     let cur = el;
     while (cur && cur !== document.documentElement) {
       let sel = cur.tagName.toLowerCase();
-      if (cur.id) { sel += `#${CSS.escape(cur.id)}`; parts.unshift(sel); break; }
+      const id = stableId(cur);
+      if (id) { sel += `#${CSS.escape(id)}`; parts.unshift(sel); break; }
       const sibs = Array.from(cur.parentNode?.children || []).filter(s => s.tagName === cur.tagName);
       if (sibs.length > 1) sel += `:nth-of-type(${sibs.indexOf(cur) + 1})`;
       parts.unshift(sel);
@@ -745,46 +852,125 @@
   function queryPath(sel) {
     let root = document;
     let el = null;
-    for (const seg of sel.split(' >>> ')) {
-      if (!root) return null;
-      el = root.querySelector(seg);
-      if (!el) return null;
-      root = el.shadowRoot;
-    }
+    try {
+      for (const seg of sel.split(' >>> ')) {
+        if (!root) return null;
+        el = root.querySelector(seg);
+        if (!el) return null;
+        root = el.shadowRoot;
+      }
+    } catch { return null; }
     return el;
   }
 
-  function persistHide(el) {
-    const sel = selectorPath(el);
+  // ─── Storage ──────────────────────────────────────────────────────────────
+  const storageKey = id => `hidden::${id}`;
+
+  function saveRecords() {
+    const key = storageKey(pageKey || pageId());
     try {
-      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-      if (!stored.includes(sel)) { stored.push(sel); localStorage.setItem(STORAGE_KEY, JSON.stringify(stored)); }
+      if (records.length) chrome.storage.local.set({ [key]: records });
+      else chrome.storage.local.remove(key);
     } catch {}
-    return sel;
   }
 
-  function restoreHidden() {
+  function persistHide(el) {
+    if (!pageKey) pageKey = pageId();
+    const rec = { sel: selectorPath(el), fp: fingerprint(el) };
+    const old = records.find(r => r.sel === rec.sel);
+    if (old) { old.fp = rec.fp; matched.set(old, el); saveRecords(); return old; }
+    records.push(rec);
+    matched.set(rec, el);
+    saveRecords();
+    return rec;
+  }
+
+  async function loadRecords(id) {
+    const key = storageKey(id);
+    let list = [];
+    try { list = (await chrome.storage.local.get(key))?.[key] || []; } catch {}
+
+    // One-time move from the site's own localStorage (1.0.11 and earlier)
+    const oldKey = `dissolve-hidden::${id}`;
     try {
-      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-      stored.forEach(sel => {
-        try {
-          const el = queryPath(sel);
-          if (el) { el.style.setProperty('visibility', 'hidden', 'important'); el.style.setProperty('pointer-events', 'none', 'important'); }
-        } catch {}
-      });
+      const old = JSON.parse(localStorage.getItem(oldKey) || 'null');
+      if (Array.isArray(old)) {
+        for (const sel of old) if (!list.some(r => r.sel === sel)) list.push({ sel });
+        await chrome.storage.local.set({ [key]: list });
+        localStorage.removeItem(oldKey);
+      }
     } catch {}
+    return list;
+  }
+
+  async function loadSettings() {
+    try {
+      const res = await chrome.storage.local.get({ dissolveDebug: null });
+      let dbg = res?.dissolveDebug;
+      if (dbg === null || dbg === undefined) {
+        const old = localStorage.getItem('dissolve-debug');
+        dbg = old === 'true';
+        if (old !== null) { chrome.storage.local.set({ dissolveDebug: dbg }); localStorage.removeItem('dissolve-debug'); }
+      }
+      debugMode = !!dbg;
+    } catch {}
+  }
+
+  // ─── Re-applying ──────────────────────────────────────────────────────────
+  function applyRecords() {
+    for (const rec of records) {
+      const cur = matched.get(rec);
+      if (cur && cur.isConnected) {
+        if (cur.style.display !== 'none') applyHide(cur); // the site cleared our style
+        continue;
+      }
+      if (cur) {
+        hiddenLog = hiddenLog.filter(h => h.el !== cur);
+        matched.delete(rec);
+      }
+      const el = findMatch(rec, new Set(matched.values()));
+      if (!el) continue;
+      applyHide(el);
+      matched.set(rec, el);
+      hiddenLog.push({ el, record: rec });
+    }
+    updateBadge();
+  }
+
+  async function syncPage() {
+    pageKey = pageId();
+    const live = records;
+    matched.clear();
+    hiddenLog = [];
+    records = await loadRecords(pageKey);
+    for (const r of live) if (!records.some(x => x.sel === r.sel)) records.push(r);
+    applyRecords();
+  }
+
+  function stopWatching() {
+    observer?.disconnect();
+    observer = null;
+    clearTimeout(watchTimer);
+    clearTimeout(applyTimer);
+  }
+
+  // Keep matching for a while: content that draws late, or is re-drawn, gets hidden too
+  function startWatching() {
+    stopWatching();
+    observer = new MutationObserver(() => {
+      clearTimeout(applyTimer);
+      applyTimer = setTimeout(() => { if (records.length) applyRecords(); }, 250);
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    watchTimer = setTimeout(stopWatching, WATCH_MS);
   }
 
   function showAll() {
-    try {
-      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-      stored.forEach(sel => {
-        try { const el = queryPath(sel); if (el) { el.style.removeProperty('display'); el.style.removeProperty('pointer-events'); } } catch {}
-      });
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {}
-    hiddenLog.forEach(({ el }) => { el.style.removeProperty('display'); el.style.removeProperty('pointer-events'); });
+    hiddenLog.forEach(({ el }) => unapplyHide(el));
     hiddenLog = [];
+    matched.clear();
+    records = [];
+    saveRecords();
     updateBadge();
   }
 
@@ -841,7 +1027,7 @@
     document.getElementById('d-showall').addEventListener('click', showAll);
     document.getElementById('d-debug-toggle').addEventListener('click', () => {
       debugMode = !debugMode;
-      localStorage.setItem('dissolve-debug', debugMode);
+      try { chrome.storage.local.set({ dissolveDebug: debugMode }); } catch {}
       const btn = document.getElementById('d-debug-toggle');
       btn.textContent = `Debug Mode: ${debugMode ? 'ON' : 'OFF'}`;
       btn.style.background = debugMode ? 'rgba(72, 187, 120, 0.2)' : 'rgba(255,255,255,0.08)';
@@ -919,6 +1105,17 @@
   });
 
   // ─── Auto-restore on page load ────────────────────────────────────────────
-  restoreHidden();
+  (async () => {
+    await loadSettings();
+    await syncPage();
+    startWatching();
+
+    // Single-page sites change the URL without reloading: switch to that page's list
+    setInterval(async () => {
+      if (pageId() === pageKey) return;
+      await syncPage();
+      startWatching();
+    }, 1000);
+  })();
 
 })();
