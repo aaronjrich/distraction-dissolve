@@ -3,7 +3,7 @@
   "name": "Dissolve — Hide Distracting Items",
   "version": "1.0.11",
   "description": "Click any element to dissolve it away. Like Safari's Distraction Control, for Edge.",
-  "permissions": ["activeTab", "storage"],
+  "permissions": ["activeTab", "storage", "scripting"],
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_icon": {

@@ -1,4 +1,9 @@
 (() => {
+  // The manifest injects this file, and the toolbar button injects it again on tabs
+  // that were open before an install or update; only the first copy may run
+  if (window.__dissolveLoaded) return;
+  window.__dissolveLoaded = true;
+
   // ─── State ────────────────────────────────────────────────────────────────
   let pickMode = false;
   let hoveredEl = null;   // element under cursor (red preview)
