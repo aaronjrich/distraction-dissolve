@@ -20,8 +20,13 @@
     'contextmenu',
   ];
 
+  // The bar, help panel and the − / + buttons: never picked, never blocked
+  function isOwnUI(el) {
+    return !!el?.closest?.('#dissolve-ui, #dissolve-size');
+  }
+
   function blockEvent(e) {
-    if (e.target?.closest('#dissolve-ui')) return; // allow our own UI
+    if (isOwnUI(e.target)) return; // allow our own UI
     e.preventDefault();
     e.stopImmediatePropagation();
   }
@@ -110,7 +115,7 @@
   function baseElementAt(x, y) {
     const stack = stackAt(x, y).filter(el => el.id !== 'dissolve-shield');
     if (debugMode && stack.length) console.log('Dissolve stack:', stack.slice(0, 12).map(describe));
-    if (!stack.length || stack[0].closest('#dissolve-ui')) return null;
+    if (!stack.length || isOwnUI(stack[0])) return null;
     let found = null;
     for (const el of stack) {
       if (el === document.documentElement || el === document.body) break;
@@ -144,7 +149,7 @@
     requestAnimationFrame(() => {
       refreshQueued = false;
       if (!pickMode) return;
-      if (selectedEl) { placeBox('dissolve-sel', selectedEl); showLabel(selectedEl); }
+      if (selectedEl) { placeBox('dissolve-sel', selectedEl); showLabel(selectedEl); showSizeControls(); }
       else if (hoveredEl) { placeBox('dissolve-hl', hoveredEl); showLabel(hoveredEl); }
       if (!selectedEl && lastMouse) onMouseMove(lastMouse);
     });
@@ -239,11 +244,33 @@
     if (label) label.style.display = 'none';
   }
 
+  // ─── Smaller / larger buttons ─────────────────────────────────────────────
+  // Sit beside the selected item, so the choice is visible where you are looking
+  function showSizeControls() {
+    const box = document.getElementById('dissolve-size');
+    if (!box) return;
+    if (!selectedEl) { box.style.display = 'none'; return; }
+    const r = selectedEl.getBoundingClientRect();
+    box.style.display = 'flex';
+    document.getElementById('d-smaller').disabled = chainIdx <= 0;
+    document.getElementById('d-larger').disabled = chainIdx >= chain.length - 1;
+
+    const w = box.offsetWidth;
+    const h = box.offsetHeight;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let top = r.bottom + 8;                                   // below the item
+    if (top + h > vh - 8) top = r.top - h - 8;                // else above it
+    if (top < 8) top = Math.max(8, Math.min(r.top + 8, vh - h - 8)); // item fills the screen
+    box.style.top = `${top}px`;
+    box.style.left = `${Math.max(8, Math.min(r.right - w, vw - w - 8))}px`;
+  }
+
   // ─── Hover preview ────────────────────────────────────────────────────────
   function setHovered(el) {
     if (hoveredEl === el) return;
     clearHovered();
-    if (!el || el.closest('#dissolve-ui')) return;
+    if (!el || isOwnUI(el)) return;
     hoveredEl = el;
     placeBox('dissolve-hl', el);
     showLabel(el);
@@ -258,12 +285,13 @@
   // ─── Selection (first click locks in) ────────────────────────────────────
   function setSelected(el) {
     clearSelected();
-    if (!el || el.closest('#dissolve-ui')) return;
+    if (!el || isOwnUI(el)) return;
     selectedEl = el;
     clearHovered();
     placeBox('dissolve-sel', el);
     document.getElementById('dissolve-bar')?.classList.add('dissolve-bar-ready');
     showLabel(el);
+    showSizeControls();
   }
 
   function clearSelected() {
@@ -272,6 +300,7 @@
     placeBox('dissolve-sel', null);
     document.getElementById('dissolve-bar')?.classList.remove('dissolve-bar-ready');
     hideLabel();
+    showSizeControls();
   }
 
   // ─── Two-click interaction ────────────────────────────────────────────────
@@ -289,7 +318,7 @@
   }
 
   function onPickClick(e) {
-    if (e.target?.closest?.('#dissolve-ui')) return;
+    if (isOwnUI(e.target)) return;
     const found = refreshChain(e.clientX, e.clientY);
 
     // Second click on the selected item (or anywhere inside it after resizing): dissolve
@@ -383,7 +412,7 @@
   }
 
   function dissolveElement(el) {
-    if (!el || el.closest('#dissolve-ui')) return;
+    if (!el || isOwnUI(el)) return;
     const rect = el.getBoundingClientRect();
 
     // Zero-size items and reduced-motion users just get a plain hide
@@ -440,7 +469,7 @@
     const { left, top, width, height } = box;
 
     // Keep our own bar and highlights out of the picture
-    const own = ['dissolve-ui', 'dissolve-label', 'dissolve-hl', 'dissolve-sel']
+    const own = ['dissolve-ui', 'dissolve-size', 'dissolve-label', 'dissolve-hl', 'dissolve-sel']
       .map(id => document.getElementById(id)).filter(Boolean);
     own.forEach(n => n.style.setProperty('visibility', 'hidden', 'important'));
     let url;
@@ -717,7 +746,7 @@
     const limit = Math.min(pool.length, 4000);
     for (let i = 0; i < limit; i++) {
       const el = pool[i];
-      if (taken.has(el) || el.closest('#dissolve-ui') || !passesGate(el, fp)) continue;
+      if (taken.has(el) || isOwnUI(el) || !passesGate(el, fp)) continue;
       const s = score(el, fp);
       if (s > bestScore) { best = el; bestScore = s; }
     }
@@ -905,7 +934,7 @@
         <div class="d-help-row"><span class="d-key">1st tap</span><span>Select an item — it turns green</span></div>
         <div class="d-help-row"><span class="d-key">2nd tap</span><span>Dissolve it away ✦</span></div>
         <div class="d-help-row"><span class="d-key">Other tap</span><span>Change selection</span></div>
-        <div class="d-help-row"><span class="d-key">[ &nbsp;]</span><span>Pick a smaller or larger piece (or Shift+scroll)</span></div>
+        <div class="d-help-row"><span class="d-key">[ &nbsp;]</span><span>Smaller or larger piece: the shrink and expand buttons, these keys, or Shift+scroll</span></div>
         <div class="d-help-row"><span class="d-key">Right-click</span><span>Deselect current item</span></div>
         <div class="d-help-row"><span class="d-key">Esc</span><span>Deselect or exit mode</span></div>
         <div class="d-help-row"><span class="d-key">Dissolve</span>
@@ -933,6 +962,20 @@
       el.id = id;
       document.documentElement.appendChild(el);
     }
+
+    const size = document.createElement('div');
+    size.id = 'dissolve-size';
+    size.innerHTML = `
+      <button id="d-smaller" title="Select a smaller piece ( [ )" aria-label="Select a smaller piece">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+      </button>
+      <button id="d-larger" title="Select a larger piece ( ] )" aria-label="Select a larger piece">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+      </button>
+    `;
+    document.documentElement.appendChild(size);
+    document.getElementById('d-smaller').addEventListener('click', () => adjustLevel(-1));
+    document.getElementById('d-larger').addEventListener('click', () => adjustLevel(1));
 
     syncEffectSelect();
     document.getElementById('d-fx').addEventListener('change', e => setEffect(e.target.value));
@@ -966,7 +1009,7 @@
   function destroyUI() {
     document.getElementById('dissolve-ui')?.remove();
     document.getElementById('dissolve-label')?.remove();
-    ['dissolve-shield', 'dissolve-hl', 'dissolve-sel'].forEach(id => document.getElementById(id)?.remove());
+    ['dissolve-shield', 'dissolve-hl', 'dissolve-sel', 'dissolve-size'].forEach(id => document.getElementById(id)?.remove());
   }
 
   function updateBadge() {

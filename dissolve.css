@@ -263,3 +263,40 @@ body.dissolve-pick-mode * {
   background: #16161c;
   color: #fff;
 }
+
+/* ── Smaller / larger buttons beside the selection ────────────────────────── */
+#dissolve-size {
+  display: none;
+  position: fixed;
+  z-index: 2147483646;
+  gap: 2px;
+  padding: 3px;
+  background: rgba(16, 16, 22, 0.93);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 100px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+#dissolve-size button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.9);
+  font: 600 18px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#dissolve-size button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+#dissolve-size button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
