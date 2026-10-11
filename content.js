@@ -249,11 +249,17 @@
   function showSizeControls() {
     const box = document.getElementById('dissolve-size');
     if (!box) return;
-    if (!selectedEl) { box.style.display = 'none'; return; }
+    if (!selectedEl) { box.style.display = 'none'; hideTip(); return; }
     const r = selectedEl.getBoundingClientRect();
     box.style.display = 'flex';
-    document.getElementById('d-smaller').disabled = chainIdx <= 0;
-    document.getElementById('d-larger').disabled = chainIdx >= chain.length - 1;
+    // Dimmed, not disabled, so the tip can still say why
+    const dim = (id, off) => {
+      const b = document.getElementById(id);
+      b.classList.toggle('d-off', off);
+      b.setAttribute('aria-disabled', off);
+    };
+    dim('d-smaller', chainIdx <= 0);
+    dim('d-larger', chainIdx >= chain.length - 1);
 
     const w = box.offsetWidth;
     const h = box.offsetHeight;
@@ -264,6 +270,31 @@
     if (top < 8) top = Math.max(8, Math.min(r.top + 8, vh - h - 8)); // item fills the screen
     box.style.top = `${top}px`;
     box.style.left = `${Math.max(8, Math.min(r.right - w, vw - w - 8))}px`;
+  }
+
+  // Instant tooltip: the native title attribute waits about a second
+  function showTip(btn) {
+    const tip = document.getElementById('dissolve-tip');
+    if (!tip) return;
+    const keys = (btn.dataset.keys || '').split('|').filter(Boolean)
+      .map(k => `<kbd>${k}</kbd>`).join('<span class="d-or">or</span>');
+    const off = btn.classList.contains('d-off') && btn.dataset.off
+      ? `<div class="d-tip-off">${btn.dataset.off}</div>` : '';
+    tip.innerHTML = `<div class="d-tip-name">${btn.dataset.tip}</div><div class="d-tip-keys">${keys}</div>${off}`;
+    tip.style.display = 'block';
+
+    const r = btn.getBoundingClientRect();
+    const w = tip.offsetWidth;
+    const h = tip.offsetHeight;
+    let top = r.bottom + 10;
+    if (top + h > window.innerHeight - 8) top = r.top - h - 10;
+    tip.style.top = `${Math.max(8, top)}px`;
+    tip.style.left = `${Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8))}px`;
+  }
+
+  function hideTip() {
+    const tip = document.getElementById('dissolve-tip');
+    if (tip) tip.style.display = 'none';
   }
 
   // ─── Hover preview ────────────────────────────────────────────────────────
@@ -317,6 +348,14 @@
     setHovered(target);
   }
 
+  function dissolveSelected() {
+    if (!selectedEl) return;
+    const el = selectedEl;
+    clearSelected();
+    resetChain();
+    dissolveElement(el);
+  }
+
   function onPickClick(e) {
     if (isOwnUI(e.target)) return;
     const found = refreshChain(e.clientX, e.clientY);
@@ -324,10 +363,7 @@
     // Second click on the selected item (or anywhere inside it after resizing): dissolve
     if (selectedEl && ((found && chain[chainIdx] === selectedEl) ||
         (levelAdjusted && pointInside(selectedEl, e.clientX, e.clientY)))) {
-      const toDissolve = selectedEl;
-      clearSelected();
-      resetChain();
-      dissolveElement(toDissolve);
+      dissolveSelected();
       return;
     }
 
@@ -341,6 +377,9 @@
     if (e.key === 'Escape') {
       if (selectedEl) clearSelected();  // first Esc: deselect
       else exitPickMode();              // second Esc: exit
+    } else if (e.key === 'Enter' && selectedEl) {
+      e.preventDefault();
+      dissolveSelected();
     } else if (e.key === '[') {
       e.preventDefault();
       adjustLevel(-1);
@@ -469,7 +508,7 @@
     const { left, top, width, height } = box;
 
     // Keep our own bar and highlights out of the picture
-    const own = ['dissolve-ui', 'dissolve-size', 'dissolve-label', 'dissolve-hl', 'dissolve-sel']
+    const own = ['dissolve-ui', 'dissolve-size', 'dissolve-tip', 'dissolve-label', 'dissolve-hl', 'dissolve-sel']
       .map(id => document.getElementById(id)).filter(Boolean);
     own.forEach(n => n.style.setProperty('visibility', 'hidden', 'important'));
     let url;
@@ -932,7 +971,7 @@
       </div>
       <div id="d-help" class="d-hidden">
         <div class="d-help-row"><span class="d-key">1st tap</span><span>Select an item — it turns green</span></div>
-        <div class="d-help-row"><span class="d-key">2nd tap</span><span>Dissolve it away ✦</span></div>
+        <div class="d-help-row"><span class="d-key">2nd tap</span><span>Dissolve it away ✦ (or press Enter)</span></div>
         <div class="d-help-row"><span class="d-key">Other tap</span><span>Change selection</span></div>
         <div class="d-help-row"><span class="d-key">[ &nbsp;]</span><span>Smaller or larger piece: the shrink and expand buttons, these keys, or Shift+scroll</span></div>
         <div class="d-help-row"><span class="d-key">Right-click</span><span>Deselect current item</span></div>
@@ -963,19 +1002,50 @@
       document.documentElement.appendChild(el);
     }
 
+    // Every action with a key has a button here; the tip shows what it does and its keys
     const size = document.createElement('div');
     size.id = 'dissolve-size';
+    const icon = paths => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
     size.innerHTML = `
-      <button id="d-smaller" title="Select a smaller piece ( [ )" aria-label="Select a smaller piece">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+      <button id="d-smaller" aria-label="Select a smaller piece" data-tip="Select a smaller piece"
+        data-keys="[|Shift+scroll down" data-off="Already the smallest piece here">
+        ${icon('<polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/>')}
       </button>
-      <button id="d-larger" title="Select a larger piece ( ] )" aria-label="Select a larger piece">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+      <button id="d-larger" aria-label="Select a larger piece" data-tip="Select a larger piece"
+        data-keys="]|Shift+scroll up" data-off="Already as large as it can go">
+        ${icon('<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>')}
+      </button>
+      <span class="d-sep"></span>
+      <button id="d-deselect" aria-label="Deselect" data-tip="Deselect, pick something else"
+        data-keys="Esc|Right-click">
+        ${icon('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>')}
+      </button>
+      <button id="d-dissolve" aria-label="Dissolve it" data-tip="Dissolve it"
+        data-keys="Enter|Click it again">
+        ${icon('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>')}
       </button>
     `;
     document.documentElement.appendChild(size);
-    document.getElementById('d-smaller').addEventListener('click', () => adjustLevel(-1));
-    document.getElementById('d-larger').addEventListener('click', () => adjustLevel(1));
+
+    const tip = document.createElement('div');
+    tip.id = 'dissolve-tip';
+    document.documentElement.appendChild(tip);
+
+    const actions = {
+      'd-smaller': () => adjustLevel(-1),
+      'd-larger': () => adjustLevel(1),
+      'd-deselect': clearSelected,
+      'd-dissolve': dissolveSelected,
+    };
+    size.addEventListener('click', e => {
+      const btn = e.target.closest('button');
+      if (btn && !btn.classList.contains('d-off')) actions[btn.id]?.();
+    });
+    size.addEventListener('mouseover', e => {
+      const btn = e.target.closest('button');
+      if (btn) showTip(btn); else hideTip();
+    });
+    size.addEventListener('mouseleave', hideTip);
 
     syncEffectSelect();
     document.getElementById('d-fx').addEventListener('change', e => setEffect(e.target.value));
@@ -1009,7 +1079,7 @@
   function destroyUI() {
     document.getElementById('dissolve-ui')?.remove();
     document.getElementById('dissolve-label')?.remove();
-    ['dissolve-shield', 'dissolve-hl', 'dissolve-sel', 'dissolve-size'].forEach(id => document.getElementById(id)?.remove());
+    ['dissolve-shield', 'dissolve-hl', 'dissolve-sel', 'dissolve-size', 'dissolve-tip'].forEach(id => document.getElementById(id)?.remove());
   }
 
   function updateBadge() {
