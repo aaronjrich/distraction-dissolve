@@ -1127,7 +1127,6 @@
   // ─── Message bridge ───────────────────────────────────────────────────────
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.action === 'togglePickMode') pickMode ? exitPickMode() : enterPickMode();
-    if (msg.action === 'showAll') showAll();
   });
 
   // ─── Auto-restore on page load ────────────────────────────────────────────
