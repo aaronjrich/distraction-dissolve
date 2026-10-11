@@ -95,6 +95,14 @@
     return `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}${cls ? '.' + cls : ''}`;
   }
 
+  // The page's own container (html > body > app root...): never the item you mean.
+  // Fixed overlays are exempt, since a full-screen popup is something to dissolve.
+  function isPageSized(el) {
+    const r = el.getBoundingClientRect();
+    if (r.width * r.height < window.innerWidth * window.innerHeight * 0.7) return false;
+    return getComputedStyle(el).position !== 'fixed';
+  }
+
   function baseElementAt(x, y) {
     const stack = stackAt(x, y).filter(el => el.id !== 'dissolve-shield');
     if (debugMode && stack.length) console.log('Dissolve stack:', stack.slice(0, 12).map(describe));
@@ -102,6 +110,7 @@
     let found = null;
     for (const el of stack) {
       if (el === document.documentElement || el === document.body) break;
+      if (isPageSized(el)) continue;
       if (looksVisible(el)) { found = el; break; }
     }
     // Pick the whole <svg>, not a path inside it
@@ -146,6 +155,7 @@
     const out = [];
     let lastRect = null;
     for (let cur = start; cur && cur !== document.body && cur !== document.documentElement; cur = parentOf(cur)) {
+      if (isPageSized(cur)) break; // growing stops short of the whole page
       const rect = cur.getBoundingClientRect();
       // A wrapper with the same box as its child adds nothing; keep the outer one
       if (lastRect && sameBox(rect, lastRect)) out[out.length - 1] = cur;
@@ -342,12 +352,251 @@
   }
 
   // ─── Dissolve animation ───────────────────────────────────────────────────
+  // Three effects, chosen from the dropdown in the help panel:
+  //   dust       real pixels of the item break away in a wave and drift off
+  //   blackhole  real pixels spiral into the center and vanish
+  //   classic    the original flat-colored squares
+  // Dust and blackhole need a screenshot of the item (the background script
+  // takes it); if that fails, classic runs instead.
+  const EFFECTS = ['dust', 'blackhole', 'classic'];
+  const MAX_PARTICLES = 32000;
+  let effect = 'dust';
+
+  try {
+    chrome.storage?.local?.get({ dissolveEffect: 'dust' }, r => {
+      if (EFFECTS.includes(r?.dissolveEffect)) { effect = r.dissolveEffect; syncEffectSelect(); }
+    });
+  } catch {}
+
+  function setEffect(name) {
+    if (!EFFECTS.includes(name)) return;
+    effect = name;
+    try { chrome.storage?.local?.set({ dissolveEffect: name }); } catch {}
+  }
+
+  function syncEffectSelect() {
+    const sel = document.getElementById('d-fx');
+    if (sel) sel.value = effect;
+  }
+
   function dissolveElement(el) {
     if (!el || el.closest('#dissolve-ui')) return;
     const rect = el.getBoundingClientRect();
 
-    // Element may have zero size (e.g. hidden overlay) — just hide silently
-    if (rect.width < 2 || rect.height < 2) { hideEl(el); return; }
+    // Zero-size items and reduced-motion users just get a plain hide
+    if (rect.width < 2 || rect.height < 2 || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      hideEl(el);
+      return;
+    }
+    if (effect === 'classic') { dissolveClassic(el); return; }
+
+    captureElement(el).catch(() => null).then(snap => {
+      if (!snap) { dissolveClassic(el); return; }
+      hideEl(el);
+      (effect === 'blackhole' ? runBlackHole : runDust)(snap);
+    });
+  }
+
+  const nextFrames = n => new Promise(resolve => {
+    const step = () => (--n <= 0 ? resolve() : requestAnimationFrame(step));
+    requestAnimationFrame(step);
+  });
+
+  // Screenshot of the visible part of the element, cropped to its box
+  async function captureElement(el) {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const r = el.getBoundingClientRect();
+    const left = Math.max(0, r.left);
+    const top = Math.max(0, r.top);
+    const width = Math.min(vw, r.right) - left;
+    const height = Math.min(vh, r.bottom) - top;
+    if (width < 4 || height < 4) return null;
+
+    // Keep our own bar and highlights out of the picture
+    const own = ['dissolve-ui', 'dissolve-label', 'dissolve-hl', 'dissolve-sel']
+      .map(id => document.getElementById(id)).filter(Boolean);
+    own.forEach(n => n.style.setProperty('visibility', 'hidden', 'important'));
+    let url;
+    try {
+      await nextFrames(2);
+      const res = await chrome.runtime.sendMessage({ action: 'captureTab' });
+      url = res?.url;
+    } finally {
+      own.forEach(n => n.style.removeProperty('visibility'));
+    }
+    if (!url) return null;
+
+    const img = new Image();
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = url;
+    });
+    const scale = img.width / vw; // device pixels per CSS pixel
+    const src = document.createElement('canvas');
+    src.width = Math.max(1, Math.round(width * scale));
+    src.height = Math.max(1, Math.round(height * scale));
+    src.getContext('2d').drawImage(img, left * scale, top * scale, width * scale, height * scale, 0, 0, src.width, src.height);
+    return { src, scale, left, top, width, height };
+  }
+
+  // A canvas over the element's spot, with room around it (in device pixels)
+  function makeStage(snap, padX, padY) {
+    const canvas = document.createElement('canvas');
+    canvas.classList.add('dissolve-canvas');
+    canvas.width = snap.src.width + padX * 2;
+    canvas.height = snap.src.height + padY * 2;
+    canvas.style.cssText = `
+      position:fixed;left:${snap.left - padX / snap.scale}px;top:${snap.top - padY / snap.scale}px;
+      width:${canvas.width / snap.scale}px;height:${canvas.height / snap.scale}px;
+      pointer-events:none;z-index:2147483647;
+    `;
+    document.documentElement.appendChild(canvas);
+    return { canvas, ctx: canvas.getContext('2d') };
+  }
+
+  // Cut the picture into small cells, each with a few random numbers of its own
+  function makeGrid(w, h) {
+    const cell = Math.max(2, Math.ceil(Math.sqrt((w * h) / MAX_PARTICLES)));
+    const cols = Math.ceil(w / cell);
+    const rows = Math.ceil(h / cell);
+    const n = cols * rows;
+    const g = {
+      cell, n,
+      gx: new Float32Array(n), gy: new Float32Array(n),
+      r1: new Float32Array(n), r2: new Float32Array(n), r3: new Float32Array(n),
+    };
+    for (let i = 0, row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++, i++) {
+        g.gx[i] = col * cell;
+        g.gy[i] = row * cell;
+        g.r1[i] = Math.random();
+        g.r2[i] = Math.random();
+        g.r3[i] = Math.random();
+      }
+    }
+    return g;
+  }
+
+  // Dust: a wave sweeps left to right; each cell lifts off, drifts up and
+  // to the right on a wobbling path, shrinks and fades
+  function runDust(snap) {
+    const S = snap.scale;
+    const { src } = snap;
+    const pad = Math.round(140 * S);
+    const { canvas, ctx } = makeStage(snap, pad, pad);
+    const g = makeGrid(src.width, src.height);
+    const DURATION = 2000;
+    const start = performance.now();
+
+    function frame(now) {
+      const t = now - start;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      for (let i = 0; i < g.n; i++) {
+        const nx = g.gx[i] / src.width;
+        const ny = g.gy[i] / src.height;
+        const delay = (nx * 0.75 + (1 - ny) * 0.1) * 700 + g.r1[i] * 220;
+        const life = 650 + g.r2[i] * 500;
+        const p = (t - delay) / life;
+        if (p >= 1) continue;
+
+        if (p <= 0) {
+          ctx.globalAlpha = 1;
+          ctx.drawImage(src, g.gx[i], g.gy[i], g.cell, g.cell, pad + g.gx[i], pad + g.gy[i], g.cell, g.cell);
+          continue;
+        }
+
+        const sec = (p * life) / 1000;
+        const x = g.gx[i] + (70 + g.r3[i] * 180) * S * sec + Math.sin(p * 6 + g.r2[i] * 6.28) * 10 * S * p;
+        const y = g.gy[i] - (25 + g.r1[i] * 110) * S * sec + Math.cos(p * 5 + g.r3[i] * 6.28) * 8 * S * p;
+        const size = g.cell * (1 - 0.55 * p);
+        ctx.globalAlpha = 1 - Math.pow(p, 1.6);
+        ctx.drawImage(src, g.gx[i], g.gy[i], g.cell, g.cell, pad + x, pad + y, size, size);
+      }
+
+      t < DURATION ? requestAnimationFrame(frame) : canvas.remove();
+    }
+
+    frame(start); // paint the untouched picture in the same frame the element disappears
+  }
+
+  // Black hole: cells spiral in toward the center, inner ones twisting more,
+  // while a dark core swells and closes
+  function runBlackHole(snap) {
+    const S = snap.scale;
+    const { src } = snap;
+    const w = src.width;
+    const h = src.height;
+    const R = Math.hypot(w, h) / 2;
+    const padX = Math.ceil(R - w / 2);
+    const padY = Math.ceil(R - h / 2);
+    const { canvas, ctx } = makeStage(snap, padX, padY);
+    const g = makeGrid(w, h);
+    const cx = padX + w / 2;
+    const cy = padY + h / 2;
+
+    const r0 = new Float32Array(g.n);
+    const a0 = new Float32Array(g.n);
+    for (let i = 0; i < g.n; i++) {
+      const dx = g.gx[i] + g.cell / 2 - w / 2;
+      const dy = g.gy[i] + g.cell / 2 - h / 2;
+      r0[i] = Math.hypot(dx, dy);
+      a0[i] = Math.atan2(dy, dx);
+    }
+
+    const DURATION = 1700;
+    const start = performance.now();
+
+    function frame(now) {
+      const t = now - start;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      for (let i = 0; i < g.n; i++) {
+        const near = 1 - r0[i] / R; // 0 at the edge, 1 at the center
+        const delay = near * 120 + g.r1[i] * 200;
+        const life = 950 + g.r2[i] * 350;
+        const p = (t - delay) / life;
+        if (p >= 1) continue;
+
+        if (p <= 0) {
+          ctx.globalAlpha = 1;
+          ctx.drawImage(src, g.gx[i], g.gy[i], g.cell, g.cell, padX + g.gx[i], padY + g.gy[i], g.cell, g.cell);
+          continue;
+        }
+
+        const r = r0[i] * (1 - p * p);
+        const a = a0[i] + (1.8 + near * 3.2 + g.r3[i] * 0.8) * Math.PI * Math.pow(p, 1.3);
+        const size = g.cell * (1 - 0.7 * p);
+        ctx.globalAlpha = p < 0.75 ? 1 : 1 - (p - 0.75) / 0.25;
+        ctx.drawImage(src, g.gx[i], g.gy[i], g.cell, g.cell,
+          cx + r * Math.cos(a) - size / 2, cy + r * Math.sin(a) - size / 2, size, size);
+      }
+
+      const pulse = Math.min(1, t / 350) * (t > DURATION - 400 ? Math.max(0, (DURATION - t) / 400) : 1);
+      if (pulse > 0) {
+        const rad = Math.min(w, h) * 0.22 * pulse + 6 * S;
+        const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad);
+        grad.addColorStop(0, 'rgba(0,0,0,0.95)');
+        grad.addColorStop(0.6, 'rgba(10,0,30,0.55)');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      t < DURATION ? requestAnimationFrame(frame) : canvas.remove();
+    }
+
+    frame(start);
+  }
+
+  // Classic: flat squares in the element's own color, as in 1.0.11
+  function dissolveClassic(el) {
+    const rect = el.getBoundingClientRect();
 
     // Canvas — cap size to avoid massive memory use
     const MAX_DIM = 1200;
@@ -371,16 +620,17 @@
     const cols = Math.ceil(cw / PS);
     const rows = Math.ceil(ch / PS);
 
-    // Sample element color
+    // Sample element color, resolved to RGB once
     const elStyle = getComputedStyle(el);
-    const baseColor =
+    const baseRGB = toRGB(
       elStyle.backgroundColor !== 'rgba(0, 0, 0, 0)' ? elStyle.backgroundColor :
-      elStyle.color !== 'rgba(0, 0, 0, 0)' ? elStyle.color : '#999';
+      elStyle.color !== 'rgba(0, 0, 0, 0)' ? elStyle.color : '#999');
 
-    // Build particle grid
+    // Build particle grid, each with its color fixed up front
     const particles = [];
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
+        const hue = Math.random() * 60 - 30;
         particles.push({
           ox: c * PS, oy: r * PS,
           x: c * PS,  y: r * PS,
@@ -389,7 +639,7 @@
           gravity: 0.14 + Math.random() * 0.16,
           alpha: 1,
           size: PS - 0.5,
-          hue: Math.random() * 60 - 30,
+          color: shiftColor(baseRGB, hue),
           delay: Math.random() * 0.28,
         });
       }
@@ -408,11 +658,11 @@
 
       for (const p of particles) {
         const pt = Math.max(0, t - p.delay);
+        ctx.fillStyle = p.color;
 
         if (pt <= 0) {
           // Not started yet — draw at origin
           ctx.globalAlpha = 1;
-          ctx.fillStyle = shiftColor(baseColor, p.hue);
           ctx.beginPath();
           ctx.roundRect(p.ox, p.oy, p.size, p.size, 1);
           ctx.fill();
@@ -429,7 +679,6 @@
           alive = true;
           ctx.globalAlpha = p.alpha;
           const s = p.size * (1 - pt * 0.35);
-          ctx.fillStyle = shiftColor(baseColor, p.hue);
           ctx.beginPath();
           ctx.roundRect(p.x, p.y, Math.max(0.5, s), Math.max(0.5, s), 1);
           ctx.fill();
@@ -442,16 +691,19 @@
     requestAnimationFrame(frame);
   }
 
-  // Lightweight color variation — avoids full HSL parsing
-  function shiftColor(color, shift) {
+  function toRGB(color) {
     const tmp = document.createElement('div');
     tmp.style.color = color;
     document.body.appendChild(tmp);
     const c = getComputedStyle(tmp).color;
     tmp.remove();
     const m = c.match(/[\d.]+/g);
-    if (!m || m.length < 3) return color;
-    return `rgb(${clamp(+m[0] + shift * 2)},${clamp(+m[1] + shift)},${clamp(+m[2] + shift * 1.5)})`;
+    return m && m.length >= 3 ? [+m[0], +m[1], +m[2]] : [153, 153, 153];
+  }
+
+  // Lightweight color variation — avoids full HSL parsing
+  function shiftColor(rgb, shift) {
+    return `rgb(${clamp(rgb[0] + shift * 2)},${clamp(rgb[1] + shift)},${clamp(rgb[2] + shift * 1.5)})`;
   }
   function clamp(v) { return Math.min(255, Math.max(0, Math.round(v))); }
 
@@ -556,6 +808,13 @@
         <div class="d-help-row"><span class="d-key">[ &nbsp;]</span><span>Pick a smaller or larger piece (or Shift+scroll)</span></div>
         <div class="d-help-row"><span class="d-key">Right-click</span><span>Deselect current item</span></div>
         <div class="d-help-row"><span class="d-key">Esc</span><span>Deselect or exit mode</span></div>
+        <div class="d-help-row"><span class="d-key">Dissolve</span>
+          <select id="d-fx" aria-label="Dissolve effect">
+            <option value="dust">Dust</option>
+            <option value="blackhole">Black hole</option>
+            <option value="classic">Classic</option>
+          </select>
+        </div>
         <button id="d-debug-toggle" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); cursor: pointer; font-size: 12px;">Debug Mode: OFF</button>
         <p class="d-note">Hidden items are remembered next time you visit this page.</p>
       </div>
@@ -576,6 +835,8 @@
       document.documentElement.appendChild(el);
     }
 
+    syncEffectSelect();
+    document.getElementById('d-fx').addEventListener('change', e => setEffect(e.target.value));
     document.getElementById('d-done').addEventListener('click', exitPickMode);
     document.getElementById('d-showall').addEventListener('click', showAll);
     document.getElementById('d-debug-toggle').addEventListener('click', () => {
