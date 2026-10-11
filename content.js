@@ -40,6 +40,7 @@
     const disabled = [];
     let target = null;
 
+    try {
     for (let i = 0; i < MAX_DEPTH; i++) {
       const el = document.elementFromPoint(x, y);
       if (!el || el === document.documentElement || el === document.body) break;
@@ -66,7 +67,7 @@
                             style.cursor === 'pointer';
 
       // Detect structural/layout containers by class name patterns
-      const classStr = (el.className || '').toLowerCase();
+      const classStr = (el.getAttribute('class') || '').toLowerCase();
       const tagStr = (el.tagName || '').toLowerCase();
       const containerKeywords = ['page', 'feed', 'wrapper', 'container', 'structure', 'provider', 'root', 'grid', 'layout', 'block', 'site', 'app', 'flex', 'main', 'aside'];
       const adKeywords = ['ad', 'advertisement', 'sponsor', 'promoted'];
@@ -86,8 +87,9 @@
       el.style.setProperty('pointer-events', 'none', 'important');
       disabled.push(el);
     }
-
-    disabled.forEach(el => el.style.removeProperty('pointer-events'));
+    } finally {
+      disabled.forEach(el => el.style.removeProperty('pointer-events'));
+    }
     return target || document.elementFromPoint(x, y);
   }
 
