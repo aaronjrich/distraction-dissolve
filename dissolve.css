@@ -5,33 +5,47 @@ body.dissolve-pick-mode * {
   user-select: none !important;
 }
 
-/* ── Hover grey preview ───────────────────────────────────────────────────── */
-.dissolve-hovered {
-  opacity: 0.6 !important;
-  outline: 2px solid rgba(239, 68, 68, 0.8) !important;
-  outline-offset: 2px !important;
-  background-color: rgba(239, 68, 68, 0.1) !important;
-  transition: opacity 0.1s ease !important;
+/* ── Click-capture layer and highlight boxes ──────────────────────────────── */
+#dissolve-shield {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483640;
+  background: transparent;
+  cursor: crosshair;
 }
 
-/* ── Selected state (first tap) ───────────────────────────────────────────── */
-.dissolve-selected {
-  opacity: 0.7 !important;
-  outline: 2px solid #48bb78 !important;
-  outline-offset: 2px !important;
-  background-color: rgba(72, 187, 120, 0.15) !important;
-  box-shadow: 0 0 0 4px rgba(72, 187, 120, 0.18) !important;
-  transition: outline 0.1s ease, box-shadow 0.1s ease !important;
-  animation: dissolve-select-blink 1.2s ease-out 1 !important;
+#dissolve-hl,
+#dissolve-sel {
+  display: none;
+  position: fixed;
+  box-sizing: border-box;
+  z-index: 2147483641;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+/* Hover preview */
+#dissolve-hl {
+  border: 2px solid rgba(239, 68, 68, 0.85);
+  background: rgba(239, 68, 68, 0.12);
+}
+
+/* Selected state (first tap) */
+#dissolve-sel {
+  border: 2px solid #48bb78;
+  background: rgba(72, 187, 120, 0.15);
+  box-shadow: 0 0 0 4px rgba(72, 187, 120, 0.18);
+  animation: dissolve-select-blink 1.2s ease-out 1;
 }
 
 @keyframes dissolve-select-blink {
-  0% { opacity: 0.7; }
-  25% { opacity: 0.4; }
-  50% { opacity: 0.7; }
-  75% { opacity: 0.4; }
-  100% { opacity: 0.7; }
+  0% { opacity: 1; }
+  25% { opacity: 0.45; }
+  50% { opacity: 1; }
+  75% { opacity: 0.45; }
+  100% { opacity: 1; }
 }
+
 
 /* ── UI wrapper ───────────────────────────────────────────────────────────── */
 #dissolve-ui {

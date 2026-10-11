@@ -4,6 +4,7 @@
   let hoveredEl = null;   // element under cursor (red preview)
   let selectedEl = null;  // element locked in by first click (green outline)
   let hiddenLog = [];
+  let lastMouse = null;   // last pointer position, to refresh the hover after a scroll
   let debugMode = localStorage.getItem('dissolve-debug') === 'true';
   const STORAGE_KEY = `dissolve-hidden::${location.hostname}${location.pathname}`;
 
@@ -72,8 +73,31 @@
     return false;
   }
 
+  // Everything under the point, topmost first, looking inside open shadow roots
+  // (many modern sites, MSN included, build their pages from web components)
+  function stackAt(x, y, root = document) {
+    const out = [];
+    for (const el of root.elementsFromPoint(x, y)) {
+      // A shadow root's own list also repeats the outer page; keep only its own tree
+      if (root !== document && el.getRootNode() !== root) continue;
+      if (el.shadowRoot) out.push(...stackAt(x, y, el.shadowRoot));
+      out.push(el);
+    }
+    return out;
+  }
+
+  function parentOf(el) {
+    return el.parentElement || el.getRootNode().host || null;
+  }
+
+  function describe(el) {
+    const cls = (el.getAttribute('class') || '').trim().replace(/\s+/g, '.');
+    return `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}${cls ? '.' + cls : ''}`;
+  }
+
   function baseElementAt(x, y) {
-    const stack = document.elementsFromPoint(x, y);
+    const stack = stackAt(x, y).filter(el => el.id !== 'dissolve-shield');
+    if (debugMode && stack.length) console.log('Dissolve stack:', stack.slice(0, 12).map(describe));
     if (!stack.length || stack[0].closest('#dissolve-ui')) return null;
     let found = null;
     for (const el of stack) {
@@ -85,6 +109,34 @@
     return found;
   }
 
+  // ─── Highlight boxes ──────────────────────────────────────────────────────
+  // Drawn as overlays instead of classes on the page's own elements, so they
+  // also work inside shadow DOM and never touch the page
+  function placeBox(id, el) {
+    const box = document.getElementById(id);
+    if (!box) return;
+    const r = el?.getBoundingClientRect();
+    if (!r || r.width < 1 || r.height < 1) { box.style.display = 'none'; return; }
+    box.style.display = 'block';
+    box.style.left = `${r.left}px`;
+    box.style.top = `${r.top}px`;
+    box.style.width = `${r.width}px`;
+    box.style.height = `${r.height}px`;
+  }
+
+  let refreshQueued = false;
+  function refreshBoxes() {
+    if (refreshQueued || !pickMode) return;
+    refreshQueued = true;
+    requestAnimationFrame(() => {
+      refreshQueued = false;
+      if (!pickMode) return;
+      if (selectedEl) { placeBox('dissolve-sel', selectedEl); showLabel(selectedEl); }
+      else if (hoveredEl) { placeBox('dissolve-hl', hoveredEl); showLabel(hoveredEl); }
+      if (!selectedEl && lastMouse) onMouseMove(lastMouse);
+    });
+  }
+
   function sameBox(a, b) {
     return Math.abs(a.left - b.left) < 3 && Math.abs(a.top - b.top) < 3 &&
            Math.abs(a.right - b.right) < 3 && Math.abs(a.bottom - b.bottom) < 3;
@@ -93,7 +145,7 @@
   function buildChain(start) {
     const out = [];
     let lastRect = null;
-    for (let cur = start; cur && cur !== document.body && cur !== document.documentElement; cur = cur.parentElement) {
+    for (let cur = start; cur && cur !== document.body && cur !== document.documentElement; cur = parentOf(cur)) {
       const rect = cur.getBoundingClientRect();
       // A wrapper with the same box as its child adds nothing; keep the outer one
       if (lastRect && sameBox(rect, lastRect)) out[out.length - 1] = cur;
@@ -179,13 +231,13 @@
     clearHovered();
     if (!el || el.closest('#dissolve-ui')) return;
     hoveredEl = el;
-    el.classList.add('dissolve-hovered');
+    placeBox('dissolve-hl', el);
     showLabel(el);
   }
 
   function clearHovered() {
-    hoveredEl?.classList.remove('dissolve-hovered');
     hoveredEl = null;
+    placeBox('dissolve-hl', null);
     if (!selectedEl) hideLabel();
   }
 
@@ -194,16 +246,16 @@
     clearSelected();
     if (!el || el.closest('#dissolve-ui')) return;
     selectedEl = el;
-    el.classList.remove('dissolve-hovered');
-    el.classList.add('dissolve-selected');
+    clearHovered();
+    placeBox('dissolve-sel', el);
     document.getElementById('dissolve-bar')?.classList.add('dissolve-bar-ready');
     showLabel(el);
   }
 
   function clearSelected() {
-    selectedEl?.classList.remove('dissolve-selected');
     selectedEl = null;
     levelAdjusted = false;
+    placeBox('dissolve-sel', null);
     document.getElementById('dissolve-bar')?.classList.remove('dissolve-bar-ready');
     hideLabel();
   }
@@ -211,6 +263,7 @@
   // ─── Two-click interaction ────────────────────────────────────────────────
   function onMouseMove(e) {
     // Only show hover preview when nothing is selected yet
+    lastMouse = { clientX: e.clientX, clientY: e.clientY };
     if (selectedEl) return;
     if (!refreshChain(e.clientX, e.clientY)) { clearHovered(); return; }
     const target = chain[chainIdx];
@@ -255,8 +308,27 @@
   }
 
   let lastWheel = 0;
+  // The click-capture layer sits over the page, so scrolling an inner
+  // scrollable area (a feed, a sidebar) has to be passed on by hand
+  function scrollableAt(x, y, dx, dy) {
+    const start = stackAt(x, y).find(el => el.id !== 'dissolve-shield');
+    for (let cur = start; cur && cur !== document.body && cur !== document.documentElement; cur = parentOf(cur)) {
+      const cs = getComputedStyle(cur);
+      const canY = dy && /(auto|scroll)/.test(cs.overflowY) && cur.scrollHeight > cur.clientHeight &&
+        (dy < 0 ? cur.scrollTop > 0 : cur.scrollTop + cur.clientHeight < cur.scrollHeight - 1);
+      const canX = dx && /(auto|scroll)/.test(cs.overflowX) && cur.scrollWidth > cur.clientWidth &&
+        (dx < 0 ? cur.scrollLeft > 0 : cur.scrollLeft + cur.clientWidth < cur.scrollWidth - 1);
+      if (canY || canX) return cur;
+    }
+    return null;
+  }
+
   function onWheel(e) {
-    if (!e.shiftKey) return; // plain scrolling still works in pick mode
+    if (!e.shiftKey) {
+      const inner = scrollableAt(e.clientX, e.clientY, e.deltaX, e.deltaY);
+      if (inner) { e.preventDefault(); inner.scrollBy(e.deltaX, e.deltaY); }
+      return; // otherwise the page itself scrolls as normal
+    }
     e.preventDefault();
     const now = performance.now();
     if (now - lastWheel < 120) return;
@@ -272,8 +344,6 @@
   // ─── Dissolve animation ───────────────────────────────────────────────────
   function dissolveElement(el) {
     if (!el || el.closest('#dissolve-ui')) return;
-    el.classList.remove('dissolve-selected', 'dissolve-hovered');
-
     const rect = el.getBoundingClientRect();
 
     // Element may have zero size (e.g. hidden overlay) — just hide silently
@@ -394,7 +464,8 @@
     updateBadge();
   }
 
-  function selectorPath(el) {
+  // Path inside one tree (the document, or a single shadow root)
+  function pathInTree(el) {
     const parts = [];
     let cur = el;
     while (cur && cur !== document.documentElement) {
@@ -406,6 +477,29 @@
       cur = cur.parentElement;
     }
     return parts.join(' > ');
+  }
+
+  // Elements inside shadow DOM get one path per tree, joined with " >>> "
+  function selectorPath(el) {
+    const segs = [];
+    for (let cur = el; cur; ) {
+      segs.unshift(pathInTree(cur));
+      const root = cur.getRootNode();
+      cur = root instanceof ShadowRoot ? root.host : null;
+    }
+    return segs.join(' >>> ');
+  }
+
+  function queryPath(sel) {
+    let root = document;
+    let el = null;
+    for (const seg of sel.split(' >>> ')) {
+      if (!root) return null;
+      el = root.querySelector(seg);
+      if (!el) return null;
+      root = el.shadowRoot;
+    }
+    return el;
   }
 
   function persistHide(el) {
@@ -422,7 +516,7 @@
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
       stored.forEach(sel => {
         try {
-          const el = document.querySelector(sel);
+          const el = queryPath(sel);
           if (el) { el.style.setProperty('visibility', 'hidden', 'important'); el.style.setProperty('pointer-events', 'none', 'important'); }
         } catch {}
       });
@@ -433,7 +527,7 @@
     try {
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
       stored.forEach(sel => {
-        try { const el = document.querySelector(sel); if (el) { el.style.removeProperty('display'); el.style.removeProperty('pointer-events'); } } catch {}
+        try { const el = queryPath(sel); if (el) { el.style.removeProperty('display'); el.style.removeProperty('pointer-events'); } } catch {}
       });
       localStorage.removeItem(STORAGE_KEY);
     } catch {}
@@ -474,6 +568,14 @@
     label.id = 'dissolve-label';
     document.body.appendChild(label);
 
+    // A transparent layer over the page: ads in iframes would otherwise swallow
+    // the mouse events and set their own cursor
+    for (const id of ['dissolve-shield', 'dissolve-hl', 'dissolve-sel']) {
+      const el = document.createElement('div');
+      el.id = id;
+      document.documentElement.appendChild(el);
+    }
+
     document.getElementById('d-done').addEventListener('click', exitPickMode);
     document.getElementById('d-showall').addEventListener('click', showAll);
     document.getElementById('d-debug-toggle').addEventListener('click', () => {
@@ -504,6 +606,7 @@
   function destroyUI() {
     document.getElementById('dissolve-ui')?.remove();
     document.getElementById('dissolve-label')?.remove();
+    ['dissolve-shield', 'dissolve-hl', 'dissolve-sel'].forEach(id => document.getElementById(id)?.remove());
   }
 
   function updateBadge() {
@@ -524,6 +627,8 @@
     document.addEventListener('contextmenu', onContextMenu, true);
     document.addEventListener('keydown', onKeyDown, true);
     document.addEventListener('wheel', onWheel, { capture: true, passive: false });
+    window.addEventListener('scroll', refreshBoxes, true);
+    window.addEventListener('resize', refreshBoxes);
     installBlockers();
   }
 
@@ -540,7 +645,10 @@
     document.removeEventListener('contextmenu', onContextMenu, true);
     document.removeEventListener('keydown', onKeyDown, true);
     document.removeEventListener('wheel', onWheel, { capture: true });
+    window.removeEventListener('scroll', refreshBoxes, true);
+    window.removeEventListener('resize', refreshBoxes);
     resetChain();
+    lastMouse = null;
   }
 
   // ─── Message bridge ───────────────────────────────────────────────────────
