@@ -356,13 +356,12 @@
   }
 
   // ─── Dissolve animation ───────────────────────────────────────────────────
-  // Three effects, chosen from the dropdown in the help panel:
+  // Two effects, chosen from the dropdown in the help panel:
   //   dust       real pixels of the item break away in a wave and drift off
   //   blackhole  real pixels spiral into the center and vanish
-  //   classic    the original flat-colored squares
-  // Dust and blackhole need a screenshot of the item (the background script
-  // takes it); if that fails, classic runs instead.
-  const EFFECTS = ['dust', 'blackhole', 'classic'];
+  // Both animate a screenshot of the item (the background script takes it). If
+  // the screenshot fails, they run on a flat patch of the item's own color.
+  const EFFECTS = ['dust', 'blackhole'];
   const MAX_PARTICLES = 32000;
   let effect = 'dust';
 
@@ -392,13 +391,40 @@
       hideEl(el);
       return;
     }
-    if (effect === 'classic') { dissolveClassic(el); return; }
 
     captureElement(el).catch(() => null).then(snap => {
-      if (!snap) { dissolveClassic(el); return; }
+      snap = snap || flatSnapshot(el);
       hideEl(el);
-      (effect === 'blackhole' ? runBlackHole : runDust)(snap);
+      if (snap) (effect === 'blackhole' ? runBlackHole : runDust)(snap);
     });
+  }
+
+  // The part of the element that is on screen
+  function visibleBox(el) {
+    const r = el.getBoundingClientRect();
+    const left = Math.max(0, r.left);
+    const top = Math.max(0, r.top);
+    const width = Math.min(window.innerWidth, r.right) - left;
+    const height = Math.min(window.innerHeight, r.bottom) - top;
+    return width < 4 || height < 4 ? null : { left, top, width, height };
+  }
+
+  // Stand-in when no screenshot is available: a flat patch of the item's color
+  function flatSnapshot(el) {
+    const box = visibleBox(el);
+    if (!box) return null;
+    const cs = getComputedStyle(el);
+    const color =
+      !/^rgba\(.*,\s*0\)$/.test(cs.backgroundColor) && cs.backgroundColor !== 'transparent' ? cs.backgroundColor :
+      cs.color || '#999';
+    const scale = window.devicePixelRatio || 1;
+    const src = document.createElement('canvas');
+    src.width = Math.max(1, Math.round(box.width * scale));
+    src.height = Math.max(1, Math.round(box.height * scale));
+    const ctx = src.getContext('2d');
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, src.width, src.height);
+    return { src, scale, ...box };
   }
 
   const nextFrames = n => new Promise(resolve => {
@@ -409,13 +435,9 @@
   // Screenshot of the visible part of the element, cropped to its box
   async function captureElement(el) {
     const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const r = el.getBoundingClientRect();
-    const left = Math.max(0, r.left);
-    const top = Math.max(0, r.top);
-    const width = Math.min(vw, r.right) - left;
-    const height = Math.min(vh, r.bottom) - top;
-    if (width < 4 || height < 4) return null;
+    const box = visibleBox(el);
+    if (!box) return null;
+    const { left, top, width, height } = box;
 
     // Keep our own bar and highlights out of the picture
     const own = ['dissolve-ui', 'dissolve-label', 'dissolve-hl', 'dissolve-sel']
@@ -597,119 +619,6 @@
 
     frame(start);
   }
-
-  // Classic: flat squares in the element's own color, as in 1.0.11
-  function dissolveClassic(el) {
-    const rect = el.getBoundingClientRect();
-
-    // Canvas — cap size to avoid massive memory use
-    const MAX_DIM = 1200;
-    const scale = Math.min(1, MAX_DIM / Math.max(rect.width, rect.height));
-    const cw = Math.ceil(rect.width * scale);
-    const ch = Math.ceil(rect.height * scale);
-
-    const canvas = document.createElement('canvas');
-    canvas.classList.add('dissolve-canvas');
-    canvas.width = cw;
-    canvas.height = ch;
-    canvas.style.cssText = `
-      position:fixed;left:${rect.left}px;top:${rect.top}px;
-      width:${rect.width}px;height:${rect.height}px;
-      pointer-events:none;z-index:2147483647;
-    `;
-    document.body.appendChild(canvas);
-
-    const ctx = canvas.getContext('2d');
-    const PS = 5; // particle size
-    const cols = Math.ceil(cw / PS);
-    const rows = Math.ceil(ch / PS);
-
-    // Sample element color, resolved to RGB once
-    const elStyle = getComputedStyle(el);
-    const baseRGB = toRGB(
-      elStyle.backgroundColor !== 'rgba(0, 0, 0, 0)' ? elStyle.backgroundColor :
-      elStyle.color !== 'rgba(0, 0, 0, 0)' ? elStyle.color : '#999');
-
-    // Build particle grid, each with its color fixed up front
-    const particles = [];
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const hue = Math.random() * 60 - 30;
-        particles.push({
-          ox: c * PS, oy: r * PS,
-          x: c * PS,  y: r * PS,
-          vx: (Math.random() - 0.5) * 8,
-          vy: -(Math.random() * 6 + 2),
-          gravity: 0.14 + Math.random() * 0.16,
-          alpha: 1,
-          size: PS - 0.5,
-          color: shiftColor(baseRGB, hue),
-          delay: Math.random() * 0.28,
-        });
-      }
-    }
-
-    // Hide the real element right away
-    hideEl(el);
-
-    const DURATION = 820;
-    const start = performance.now();
-
-    function frame(now) {
-      const t = Math.min((now - start) / DURATION, 1);
-      ctx.clearRect(0, 0, cw, ch);
-      let alive = false;
-
-      for (const p of particles) {
-        const pt = Math.max(0, t - p.delay);
-        ctx.fillStyle = p.color;
-
-        if (pt <= 0) {
-          // Not started yet — draw at origin
-          ctx.globalAlpha = 1;
-          ctx.beginPath();
-          ctx.roundRect(p.ox, p.oy, p.size, p.size, 1);
-          ctx.fill();
-          alive = true;
-          continue;
-        }
-
-        const prog = pt * 55;
-        p.x = p.ox + p.vx * prog;
-        p.y = p.oy + p.vy * prog + 0.5 * p.gravity * prog * prog * 0.13;
-        p.alpha = Math.max(0, 1 - pt * 1.5);
-
-        if (p.alpha > 0.01) {
-          alive = true;
-          ctx.globalAlpha = p.alpha;
-          const s = p.size * (1 - pt * 0.35);
-          ctx.beginPath();
-          ctx.roundRect(p.x, p.y, Math.max(0.5, s), Math.max(0.5, s), 1);
-          ctx.fill();
-        }
-      }
-
-      alive && t < 1 ? requestAnimationFrame(frame) : canvas.remove();
-    }
-
-    requestAnimationFrame(frame);
-  }
-
-  function toRGB(color) {
-    const tmp = document.createElement('div');
-    tmp.style.color = color;
-    document.body.appendChild(tmp);
-    const c = getComputedStyle(tmp).color;
-    tmp.remove();
-    const m = c.match(/[\d.]+/g);
-    return m && m.length >= 3 ? [+m[0], +m[1], +m[2]] : [153, 153, 153];
-  }
-
-  // Lightweight color variation — avoids full HSL parsing
-  function shiftColor(rgb, shift) {
-    return `rgb(${clamp(rgb[0] + shift * 2)},${clamp(rgb[1] + shift)},${clamp(rgb[2] + shift * 1.5)})`;
-  }
-  function clamp(v) { return Math.min(255, Math.max(0, Math.round(v))); }
 
   // ─── Hide + remember ──────────────────────────────────────────────────────
   // Hidden items are saved per page in chrome.storage.local (not the site's own
@@ -1003,7 +912,6 @@
           <select id="d-fx" aria-label="Dissolve effect">
             <option value="dust">Dust</option>
             <option value="blackhole">Black hole</option>
-            <option value="classic">Classic</option>
           </select>
         </div>
         <button id="d-debug-toggle" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); cursor: pointer; font-size: 12px;">Debug Mode: OFF</button>
