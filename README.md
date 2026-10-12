@@ -1,16 +1,24 @@
 # Dissolve — Hide Distracting Items
 
-Dissolve is a browser extension for Microsoft Edge that lets you click distracting page elements to hide them temporarily. It is designed to behave like a distraction filter, with direct in-page selection, debug mode, and remembered hidden elements.
+Dissolve is a browser extension for Microsoft Edge. Click an ad, a popup, a sidebar or any other distracting piece of a page and it dissolves away. The idea comes from Safari's Distraction Control on the iPhone.
 
 ## Features
 
 - Click the extension icon to enter pick mode
-- Hover a page element to preview selection
-- Click once to select, click again to dissolve
-- Right-click or press `Esc` to cancel selection
-- `Esc` again to exit pick mode
-- Debug mode is available in the help panel
-- Hidden items are remembered for the current page
+- Hover to see what you would pick (red box), click once to select it (green), click again or press `Enter` to dissolve it
+- It starts on the smallest item under the cursor. If you want more, use the expand and shrink buttons beside the selection, or `]` and `[`
+- The buttons beside the selection also deselect (`Esc` or right-click) and dissolve (`Enter`). Hover a button to see its keys
+- Two dissolve effects, chosen in the help panel: Dust (the item breaks apart and drifts off) and Black hole (it spirals into the center). Black hole unlocks when you finish the practice page
+- Hidden items are remembered for the page and hidden again on your next visit, even if the page layout shifts a little
+- Unhide All brings everything back for the current page
+- A practice page with three short levels, from the help panel or the first-run prompt
+- Debug mode, in the help panel, writes what the picker sees to the browser console
+
+## Limits
+
+- Ads that live inside an iframe from another site are hidden as a whole box. Dissolve cannot see inside them.
+- Items are remembered per page (site plus path), not per site.
+- If a site renames its page elements, an item may not be found again. Pick it again and it is saved fresh.
 
 ## Installation
 
@@ -21,18 +29,23 @@ Dissolve is a browser extension for Microsoft Edge that lets you click distracti
 
 ## Development
 
-This is a Manifest V3 extension.
+This is a Manifest V3 extension with no build step.
 
-- `manifest.json` — extension metadata and permissions
-- `content.js` — main interaction and hide logic
-- `dissolve.css` — hover/selection and UI styling
-- `background.js` — toolbar click handling
+- `manifest.json`: extension metadata and permissions
+- `content.js`: the picker, the dissolve effects and the remembering logic
+- `dissolve.css`: styling for the highlight boxes, bar, menu and tooltips
+- `background.js`: toolbar click handling, tab screenshots, and opening the practice page
+- `practice.html`, `practice.js`, `practice.css`: the practice page
+- `store-assets/`: the store icons and screenshots (not part of the extension, leave out of the zip)
+- `privacy-policy.md` and `docs/privacy-policy.md`: the policy, kept identical (the `docs/` copy is served by GitHub Pages)
+
+To test, load the folder unpacked as above. After a change, click the reload arrow on the extension's card and refresh the page you are testing.
 
 ## Version
 
-Current development version: `1.0.11`
+Current version: `1.0.12`
 
-For Edge Add-ons submission details, see [STORE_SUBMISSION.md](STORE_SUBMISSION.md).
+For Edge Add-ons submission details, see [STORE_SUBMISSION.md](STORE_SUBMISSION.md). Ideas for later are in [IDEAS.md](IDEAS.md).
 
 ## Support
 

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dissolve practice</title>
+  <link rel="stylesheet" href="dissolve.css">
+  <link rel="stylesheet" href="practice.css">
+</head>
+<body>
+  <aside id="dissolve-coach">
+    <div class="coach-top">
+      <span class="coach-brand">Dissolve practice</span>
+      <span id="coach-step"></span>
+    </div>
+    <div id="coach-dots" aria-hidden="true"></div>
+    <h1 id="coach-title"></h1>
+    <p id="coach-text"></p>
+    <p id="coach-hint"></p>
+    <div id="coach-status" role="status"></div>
+    <div class="coach-actions">
+      <button id="coach-start" hidden>Start picking</button>
+      <button id="coach-reset">Reset this level</button>
+      <button id="coach-next" hidden>Next level</button>
+    </div>
+  </aside>
+
+  <main id="stage"></main>
+
+  <!-- The same picker code that runs on real pages -->
+  <script src="content.js"></script>
+  <script src="practice.js"></script>
+</body>
+</html>
