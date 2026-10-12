@@ -16,6 +16,7 @@
   let selectedEl = null;  // element locked in by first click (green outline)
   let hiddenLog = [];
   let lastMouse = null;   // last pointer position, to refresh the hover after a scroll
+  let boxTimer = null;    // keeps the highlight on its element when the page shifts by itself
   let debugMode = false;  // loaded from chrome.storage.local at startup
 
   // ─── Block ALL interaction during pick mode ───────────────────────────────
@@ -1167,6 +1168,8 @@
     document.addEventListener('wheel', onWheel, { capture: true, passive: false });
     window.addEventListener('scroll', refreshBoxes, true);
     window.addEventListener('resize', refreshBoxes);
+    // A late-loading ad or image can move things without any scroll or resize
+    boxTimer = setInterval(refreshBoxes, 300);
     installBlockers();
   }
 
@@ -1185,6 +1188,7 @@
     document.removeEventListener('wheel', onWheel, { capture: true });
     window.removeEventListener('scroll', refreshBoxes, true);
     window.removeEventListener('resize', refreshBoxes);
+    clearInterval(boxTimer);
     resetChain();
     lastMouse = null;
     emit('pickmode', { on: false });
