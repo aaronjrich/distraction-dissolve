@@ -36,6 +36,7 @@ This is a Manifest V3 extension with no build step.
 - `dissolve.css`: styling for the highlight boxes, bar, menu and tooltips
 - `background.js`: toolbar click handling, tab screenshots, and opening the practice page
 - `practice.html`, `practice.js`, `practice.css`: the practice page
+- `store-assets/`: the store icons and screenshots (not part of the extension, leave out of the zip)
 - `privacy-policy.md` and `docs/privacy-policy.md`: the policy, kept identical (the `docs/` copy is served by GitHub Pages)
 
 To test, load the folder unpacked as above. After a change, click the reload arrow on the extension's card and refresh the page you are testing.
