@@ -1,3 +1,8 @@
+---
+layout: default
+title: Dissolve privacy policy
+---
+
 # Privacy Policy
 
 Last updated: October 11, 2026
