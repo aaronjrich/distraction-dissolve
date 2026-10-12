@@ -145,6 +145,60 @@ body {
 .cbody { padding: 12px 14px 14px; }
 .cbody small { display: block; margin-top: 8px; color: var(--muted); }
 
+/* The sponsored card in level 2: deliberately obnoxious, so there is a reason to remove it */
+.shout-card {
+  position: relative;
+  border: 3px dashed #fff;
+  background: linear-gradient(135deg, #ff2d95, #ffd400 55%, #00e5ff);
+  animation: ad-pulse 0.8s ease-in-out infinite alternate;
+}
+.shout-card .pic {
+  position: relative;
+  background: repeating-linear-gradient(45deg, #ff2d95 0 14px, #ffd400 14px 28px);
+}
+.shout-card .burst {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 14px 10px;
+  border: 3px dashed #ffe600;
+  border-radius: 50%;
+  background: #e00000;
+  color: #ffe600;
+  font-size: 15px;
+  font-weight: 900;
+  transform: rotate(12deg);
+}
+.shout-card .cbody { background: #fff3a0; }
+.shout-card .cbody a {
+  display: block;
+  color: #1a1a1a;
+  font-size: 17px;
+  font-weight: 900;
+  text-shadow: 1px 1px 0 #ff7ab8;
+}
+.shout-card .hurry {
+  display: block;
+  margin-top: 6px;
+  color: #d40000;
+  font-weight: 900;
+  text-transform: uppercase;
+  animation: ad-blink 0.7s steps(2, end) infinite;
+}
+.shout-card .cbody small { color: #a40000; font-weight: 800; letter-spacing: 0.08em; }
+
+@keyframes ad-pulse {
+  from { box-shadow: 0 0 6px #ffe600; }
+  to   { box-shadow: 0 0 26px #ff2dff; }
+}
+@keyframes ad-blink {
+  50% { opacity: 0.15; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shout-card, .shout-card .hurry { animation: none; }
+}
+
 /* ── The popup in level 3 ── */
 .popup {
   position: fixed;

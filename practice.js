@@ -60,7 +60,7 @@
     },
     {
       title: 'Take the whole card',
-      text: 'Dissolve the entire sponsored card: picture, headline and the Sponsored tag together.',
+      text: 'Dissolve the entire flashing sponsored card: the picture, the headline and the SPONSORED tag, all together.',
       hint: 'Click the headline once. Then press the expand button beside the green box until the whole card is green, and click the card again.',
       build() {
         stage.innerHTML = `
@@ -68,7 +68,10 @@
             <h2>Today's reading</h2>
             <div class="cards">
               <div class="card"><div class="pic p1"></div><div class="cbody"><a href="#">Five quiet places to read</a></div></div>
-              <div class="card" id="t2"><div class="pic p2"></div><div class="cbody"><a href="#">This one weird trick for your inbox</a><small>Sponsored</small></div></div>
+              <div class="card shout-card" id="t2">
+                <div class="pic p2"><span class="burst">50% OFF!!!</span></div>
+                <div class="cbody"><a href="#">ThIs ONE WeIrD TrIcK For YoUr InBoX!!!</a><span class="hurry">Only 3 left! Act NOW!</span><small>SPONSORED</small></div>
+              </div>
               <div class="card"><div class="pic p3"></div><div class="cbody"><a href="#">How to cook rice</a></div></div>
             </div>
           </div>`;
@@ -78,7 +81,7 @@
         if (el === c.target) return 'That is the whole card. Click it again, or press Enter, to dissolve it.';
         if (c.target.contains(el)) return 'Only part of the card. Press the expand button beside the green box (or ]) to include more.';
         if (el.contains(c.target)) return 'Too big, that includes the other cards. Press the shrink button, or [.';
-        return 'That is a different card. Look for the Sponsored tag.';
+        return 'That is a different card. Look for the flashing one.';
       },
       judge(el, c) {
         if (el === c.target) return { win: true, msg: 'The whole card, gone.' };
