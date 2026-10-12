@@ -31,7 +31,7 @@
   const LEVELS = [
     {
       title: 'Dissolve just one link',
-      text: 'Remove the sponsored link in the sidebar. Only that link, not the whole sidebar.',
+      text: 'Remove the loud sponsored link in the sidebar. Only that link, not the whole sidebar.',
       hint: 'Hover it to see the red box, click once to select it (it turns green), then click it again.',
       build() {
         stage.innerHTML = `
@@ -39,7 +39,7 @@
             <aside class="side">
               <h3>Trending</h3>
               <a href="#">Ten tips for staying focused</a>
-              <a href="#" id="t1">Sponsored: win a free cruise</a>
+              <a href="#" id="t1">SpOnSoReD LiNk: WiN a FrEe CrUiSe!!!</a>
               <a href="#">Why mornings matter</a>
               <a href="#">A quiet guide to tea</a>
             </aside>
@@ -50,7 +50,7 @@
       onSelect(el, c) {
         if (el === c.target) return 'That is the link. Click it again, or press Enter, to dissolve it.';
         if (el.contains(c.target)) return 'That is bigger than the link. Press the shrink button beside the green box, or [.';
-        return 'That is not the sponsored link. Look for the one marked Sponsored.';
+        return 'That is not the sponsored link. Look for the loud, flashing one.';
       },
       judge(el, c) {
         if (el === c.target) return { win: true, msg: 'Clean. Just that link.' };

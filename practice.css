@@ -112,6 +112,30 @@ body {
 
 .page:has(.side) { grid-template-columns: 260px 1fr; }
 
+/* The sponsored link in level 1: deliberately loud, so it is obvious what to remove */
+.side a#t1 {
+  display: block;
+  padding: 9px 11px;
+  border: 2px dashed #fff;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #ff2d95, #ffd400, #00e5ff, #7c4dff, #ff2d95);
+  background-size: 300% 100%;
+  color: #111;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.8);
+  animation: gaudy-slide 1.6s linear infinite;
+}
+
+@keyframes gaudy-slide {
+  to { background-position: 300% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .side a#t1 { animation: none; }
+}
+
 .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .card { overflow: hidden; border-radius: 10px; background: var(--panel); }
 .pic { height: 130px; }
