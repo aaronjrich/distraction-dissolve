@@ -59,6 +59,34 @@ Notes:
 - The extension makes no network requests.
 - Privacy policy: https://aaronjrich.github.io/distraction-dissolve/privacy-policy.html
 
+## Privacy tab in Partner Center
+
+Each box has a 1000 character limit.
+
+**Single purpose description**
+
+Dissolve lets you hide distracting parts of a web page, such as ads, popups and sidebars, by clicking them. Everything the extension does serves that one purpose: choosing an item on the page, hiding it with a short animation, and remembering it so it stays hidden the next time you visit that page.
+
+**activeTab justification**
+
+Used when the user clicks the toolbar icon. It lets Dissolve act on that tab to start the picker, and to take a screenshot of the visible part of the tab so the removed item can break apart using its real pixels in the animation. The screenshot stays in memory for the animation and is never saved or sent anywhere.
+
+**storage justification**
+
+Saves, on the user's device only, the items they chose to hide on each page (the site address, the page path, and a short description of each item) so they can be hidden again on the next visit, plus the user's settings such as the chosen animation. Nothing is sent to any server.
+
+**scripting justification**
+
+Used only when the user clicks the toolbar icon on a tab that was already open when the extension was installed or updated. It injects the extension's own files (content.js and dissolve.css) into that tab so the icon works without reloading the page. No remote code is loaded or run.
+
+**If asked why it runs on all sites (host access or content scripts)**
+
+The content script runs on all pages so that items the user previously hid are hidden again automatically when they return, without another click. On a page where nothing was hidden it does nothing visible. It does not transmit page content anywhere.
+
+**Disclosures**
+
+Answer from what the form actually asks. Dissolve does not transmit any user data and has no server. It stores, locally in the browser, the addresses of pages where the user hid something, and settings. Do not tick that data is sold, used for unrelated purposes, or used for creditworthiness or lending.
+
 ## Search terms
 
 hide ads, remove popups, distraction free, declutter, hide elements, focus, reading mode
