@@ -37,7 +37,7 @@ This is a Manifest V3 extension with no build step.
 - `background.js`: toolbar click handling, tab screenshots, and opening the practice page
 - `practice.html`, `practice.js`, `practice.css`: the practice page
 - `store-assets/`: the store icons and screenshots (not part of the extension, leave out of the zip)
-- `privacy-policy.md` and `docs/privacy-policy.md`: the policy, kept identical (the `docs/` copy is served by GitHub Pages)
+- `privacy-policy.md` and `docs/privacy-policy.md`: the policy. The two copies have the same text; the `docs/` copy starts with a short header so GitHub Pages turns it into a web page
 
 To test, load the folder unpacked as above. After a change, click the reload arrow on the extension's card and refresh the page you are testing.
 
