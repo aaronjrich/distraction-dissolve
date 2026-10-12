@@ -6,7 +6,7 @@ Not planned for a specific release. Anything here should stay optional and local
 
 - A counter in the help panel: "214 distractions dissolved on 18 sites". Stored locally.
 - A clean-page score after pressing Done: "You freed 31% of this page".
-- Unlockable effects at milestones (more than Dust and Black hole).
+- More unlockable effects at milestones. Black hole already unlocks by finishing the practice page. A second route, such as a number of dissolves, would help people who skip the practice.
 - Small achievements ("Popup Slayer", "Used the big hammer"), with one switch to turn all of it off.
 
 ## Practice page

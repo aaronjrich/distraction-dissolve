@@ -170,14 +170,24 @@
     restarting = false;
   }
 
+  // Three things to dissolve on the finish page, so the new effect can be tried right away
+  function buildPlayground() {
+    $('playground').innerHTML = `
+      <div class="toy t-a">Free gift!</div>
+      <div class="toy t-b">Act now</div>
+      <div class="toy t-c">Subscribe</div>`;
+  }
+
   function finish() {
     clearTimers();
     finished = true;
+    restarting = true;
     if (picking) api.exit();
     try { chrome.storage.local.set({ practiceDone: true }); } catch {}
+    api.unlockBlackHole();
     $('coach-step').textContent = 'All done';
-    $('coach-title').textContent = 'You are ready';
-    $('coach-text').textContent = 'That is everything. On any page, click the Dissolve icon and use these:';
+    $('coach-title').textContent = 'New dissolve unlocked';
+    $('coach-text').textContent = 'Finishing the practice unlocked the Black hole dissolve. The steps on the right show how to pick it.';
     $('coach-hint').textContent = '';
     $('coach-next').hidden = true;
     $('coach-reset').hidden = true;
@@ -187,6 +197,32 @@
     renderDots();
     stage.innerHTML = `
       <div class="page done-page">
+        <div class="unlock">
+          <div class="unlock-title">You unlocked the Black hole dissolve!</div>
+          <div class="unlock-sub">Everything spirals into the center and vanishes.</div>
+        </div>
+
+        <h2>How to pick it</h2>
+        <ol class="steps">
+          <li>
+            <div class="step-text"><b>Open the help panel.</b> Click the <b>?</b> in the bar at the top of the page while you are picking.</div>
+            <div class="mock mock-bar"><span class="mock-q">?</span><span class="mock-sep"></span><span>Unhide All</span><span class="mock-done">Done</span></div>
+          </li>
+          <li>
+            <div class="step-text"><b>Set Dissolve to Black hole.</b> It is the second choice in the list.</div>
+            <div class="mock mock-row"><span class="mock-key">Dissolve</span><span class="mock-select">Black hole <i>&#9662;</i></span></div>
+          </li>
+          <li>
+            <div class="step-text"><b>Dissolve something.</b> The choice is remembered on every site.</div>
+          </li>
+        </ol>
+        <p><button id="use-bh" class="try-btn" data-dissolve-ui>Switch to Black hole for me</button></p>
+
+        <h2>Try it right here</h2>
+        <p>Pick mode is still on. Click one of these once, then again.</p>
+        <div id="playground" class="playground"></div>
+        <p><button id="toys-back" class="try-btn quiet" data-dissolve-ui>Bring them back</button></p>
+
         <h2>The short version</h2>
         <ul class="cheats">
           <li><b>Hover</b> to see what you would pick (red box).</li>
@@ -194,10 +230,20 @@
           <li><b>Not the right piece?</b> Use the shrink and expand buttons beside it, or <kbd>[</kbd> and <kbd>]</kbd>.</li>
           <li><b>Changed your mind?</b> <kbd>Esc</kbd> or right-click to deselect. <kbd>Esc</kbd> again to leave pick mode.</li>
           <li><b>Want it back?</b> Unhide All in the bar. Hidden items are remembered next time you visit the page.</li>
-          <li><b>Different look?</b> Open the <b>?</b> panel to switch between Dust and Black hole.</li>
         </ul>
-        <p class="you-can-close">You can close this tab now.</p>
+        <p class="you-can-close">You can close this tab when you are done.</p>
       </div>`;
+    buildPlayground();
+    $('use-bh').addEventListener('click', () => {
+      api.setEffect('blackhole');
+      $('use-bh').textContent = 'Black hole is on. Dissolve one of the boxes below.';
+      $('use-bh').disabled = true;
+    });
+    $('toys-back').addEventListener('click', () => { api.exit(); buildPlayground(); api.enter(); });
+
+    // Keep pick mode on so the effect can be tried on this page
+    api.enter();
+    restarting = false;
   }
 
   function onEvent(type, detail) {

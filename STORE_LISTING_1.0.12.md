@@ -14,7 +14,7 @@ Click the Dissolve icon in the toolbar to start. Hover over the page and a red b
 
 Dissolve starts with the smallest item under your cursor. If you want a bigger piece, such as the whole ad card instead of just its headline, use the expand button beside the selection. The shrink button goes back down. Both have keyboard shortcuts, and the tip on each button shows them.
 
-Pick one of two dissolve effects from the help panel. Dust breaks the item into grains that drift away. Black hole pulls it into a swirl and it disappears.
+Dissolve has two effects, chosen from the help panel. Dust breaks the item into grains that drift away, and it is there from the start. Black hole pulls the item into a swirl until it disappears. You unlock it by finishing the short practice page.
 
 What Dissolve remembers: the items you hide are saved on your device for that page, and they are hidden again the next time you open it, even if the layout has shifted a little. Press Unhide All in the bar to bring everything back.
 
@@ -30,7 +30,7 @@ Notes:
 
 - Hover to preview in red, click to select in green, click again to dissolve
 - Expand and shrink buttons to choose the right size of piece
-- Two dissolve effects: Dust and Black hole
+- Two dissolve effects: Dust, and Black hole (unlocked by finishing the practice)
 - Remembers what you hid and hides it again on your next visit
 - Unhide All, deselect with Esc or right-click, and Enter to dissolve
 - A built-in practice page
@@ -46,7 +46,7 @@ Notes:
 - Hidden items are saved in the extension's own storage and found again more reliably after a page changes
 - Unhide All now works on items restored after a reload
 - The icon now works on tabs that were open before an update, and shows a red ! on pages where extensions are not allowed
-- A practice page for new users
+- A practice page for new users. Finishing it unlocks the Black hole dissolve
 - Fixed an error when hovering icons and other SVG graphics
 - Works over ads inside iframes and on sites built with web components
 

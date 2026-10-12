@@ -183,3 +183,123 @@ kbd {
   .page:has(.side), .cards { grid-template-columns: 1fr; }
   .popup { left: 50%; }
 }
+
+/* ── Finish page: the unlock, the steps, the playground ── */
+.unlock {
+  padding: 22px 24px;
+  border-radius: 14px;
+  background: linear-gradient(120deg, #2b1b4d, #14263f 55%, #0f3b3b);
+  border: 1px solid rgba(144, 205, 244, 0.35);
+  box-shadow: 0 0 40px rgba(124, 77, 255, 0.25);
+}
+.unlock-title { font-size: 26px; font-weight: 800; line-height: 1.2; color: #fff; }
+.unlock-sub { margin-top: 6px; color: var(--blue); }
+
+.steps { margin: 0; padding: 0; list-style: none; counter-reset: step; display: grid; gap: 14px; }
+.steps li {
+  counter-increment: step;
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  gap: 14px;
+  align-items: center;
+}
+.steps li::before {
+  content: counter(step);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #0f0f16;
+  font-weight: 700;
+  font-size: 14px;
+}
+.step-text { color: var(--text); }
+
+/* Little pictures of the real controls */
+.mock {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: 100px;
+  background: rgba(16, 16, 22, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
+}
+.mock-q {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--blue);
+  background: rgba(99, 179, 237, 0.2);
+  color: var(--blue);
+  font-weight: 700;
+  font-size: 11px;
+  box-shadow: 0 0 0 4px rgba(99, 179, 237, 0.2);
+}
+.mock-sep { width: 1px; height: 14px; background: rgba(255, 255, 255, 0.15); }
+.mock-done { padding: 3px 10px; border-radius: 100px; background: #63b3ed; color: #0f0f16; font-weight: 600; }
+.mock-row { border-radius: 8px; padding: 7px 10px; }
+.mock-key {
+  padding: 1px 7px;
+  border: 1px solid rgba(99, 179, 237, 0.3);
+  border-radius: 4px;
+  background: rgba(99, 179, 237, 0.12);
+  color: var(--blue);
+  font-weight: 600;
+  font-size: 10px;
+}
+.mock-select {
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 2px solid var(--blue);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 4px rgba(99, 179, 237, 0.2);
+  color: #fff;
+}
+.mock-select i { font-style: normal; margin-left: 6px; opacity: 0.7; }
+
+/* Buttons here sit in the page, so lift them above the click-capture layer */
+.try-btn {
+  position: relative;
+  z-index: 2147483645;
+  padding: 9px 16px;
+  border: none;
+  border-radius: 8px;
+  background: var(--blue);
+  color: #0f0f16;
+  font: inherit;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+.try-btn:hover:not(:disabled) { background: #bee3f8; }
+.try-btn:disabled { opacity: 0.7; cursor: default; }
+.try-btn.quiet { background: transparent; border: 1px solid var(--line); color: var(--text); font-weight: 500; }
+.try-btn.quiet:hover { background: rgba(255, 255, 255, 0.08); }
+
+.playground { display: flex; gap: 16px; flex-wrap: wrap; }
+.toy {
+  display: grid;
+  place-items: center;
+  width: 150px;
+  height: 100px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 800;
+}
+.t-a { background: linear-gradient(135deg, #f76707, #fcc419); }
+.t-b { background: linear-gradient(135deg, #7048e8, #e64980); }
+.t-c { background: linear-gradient(135deg, #1098ad, #4263eb); }
+
+@media (max-width: 900px) {
+  .steps li { grid-template-columns: 32px 1fr; }
+  .steps .mock { grid-column: 2; justify-self: start; }
+}

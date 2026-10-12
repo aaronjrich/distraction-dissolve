@@ -8,7 +8,7 @@ Dissolve is a browser extension for Microsoft Edge. Click an ad, a popup, a side
 - Hover to see what you would pick (red box), click once to select it (green), click again or press `Enter` to dissolve it
 - It starts on the smallest item under the cursor. If you want more, use the expand and shrink buttons beside the selection, or `]` and `[`
 - The buttons beside the selection also deselect (`Esc` or right-click) and dissolve (`Enter`). Hover a button to see its keys
-- Two dissolve effects, chosen in the help panel: Dust (the item breaks apart and drifts off) and Black hole (it spirals into the center)
+- Two dissolve effects, chosen in the help panel: Dust (the item breaks apart and drifts off) and Black hole (it spirals into the center). Black hole unlocks when you finish the practice page
 - Hidden items are remembered for the page and hidden again on your next visit, even if the page layout shifts a little
 - Unhide All brings everything back for the current page
 - A practice page with three short levels, from the help panel or the first-run prompt

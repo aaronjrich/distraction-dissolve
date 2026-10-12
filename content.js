@@ -28,7 +28,7 @@
 
   // The bar, help panel and the − / + buttons: never picked, never blocked
   function isOwnUI(el) {
-    return !!el?.closest?.('#dissolve-ui, #dissolve-size, #dissolve-coach');
+    return !!el?.closest?.('#dissolve-ui, #dissolve-size, #dissolve-coach, [data-dissolve-ui]');
   }
 
   function blockEvent(e) {
@@ -439,22 +439,41 @@
   const EFFECTS = ['dust', 'blackhole'];
   const MAX_PARTICLES = 32000;
   let effect = 'dust';
+  let blackHoleUnlocked = false; // finishing the practice page unlocks it
 
   try {
-    chrome.storage?.local?.get({ dissolveEffect: 'dust' }, r => {
-      if (EFFECTS.includes(r?.dissolveEffect)) { effect = r.dissolveEffect; syncEffectSelect(); }
+    chrome.storage?.local?.get({ dissolveEffect: 'dust', practiceDone: false }, r => {
+      blackHoleUnlocked = !!r?.practiceDone;
+      if (EFFECTS.includes(r?.dissolveEffect)) effect = r.dissolveEffect;
+      syncEffectSelect();
+    });
+    // Picks up a change made on another tab, such as finishing the practice
+    chrome.storage?.onChanged?.addListener(changes => {
+      if (changes.practiceDone) blackHoleUnlocked = !!changes.practiceDone.newValue;
+      if (changes.dissolveEffect && EFFECTS.includes(changes.dissolveEffect.newValue)) effect = changes.dissolveEffect.newValue;
+      syncEffectSelect();
     });
   } catch {}
 
+  // What actually plays: a locked Black hole falls back to Dust
+  const activeEffect = () => (effect === 'blackhole' && blackHoleUnlocked ? 'blackhole' : 'dust');
+
   function setEffect(name) {
-    if (!EFFECTS.includes(name)) return;
+    if (!EFFECTS.includes(name) || (name === 'blackhole' && !blackHoleUnlocked)) return;
     effect = name;
     try { chrome.storage?.local?.set({ dissolveEffect: name }); } catch {}
+    syncEffectSelect();
   }
 
   function syncEffectSelect() {
     const sel = document.getElementById('d-fx');
-    if (sel) sel.value = effect;
+    if (!sel) return;
+    const bh = sel.querySelector('option[value="blackhole"]');
+    if (bh) {
+      bh.disabled = !blackHoleUnlocked;
+      bh.textContent = blackHoleUnlocked ? 'Black hole' : 'Black hole (finish the practice)';
+    }
+    sel.value = activeEffect();
   }
 
   function dissolveElement(el) {
@@ -472,7 +491,7 @@
     captureElement(el).catch(() => null).then(snap => {
       snap = snap || flatSnapshot(el);
       hideEl(el);
-      if (snap) (effect === 'blackhole' ? runBlackHole : runDust)(snap);
+      if (snap) (activeEffect() === 'blackhole' ? runBlackHole : runDust)(snap);
     });
   }
 
@@ -1173,7 +1192,13 @@
 
   // The practice page drives and watches pick mode through this
   if (IS_PRACTICE) {
-    window.__dissolve = { on: fn => practiceListeners.push(fn), enter: enterPickMode, exit: exitPickMode };
+    window.__dissolve = {
+      on: fn => practiceListeners.push(fn),
+      enter: enterPickMode,
+      exit: exitPickMode,
+      unlockBlackHole: () => { blackHoleUnlocked = true; syncEffectSelect(); },
+      setEffect,
+    };
   }
 
   // ─── Message bridge ───────────────────────────────────────────────────────

@@ -18,7 +18,8 @@ Submission notes for Dissolve. The ready-to-paste listing text for 1.0.12 is in 
 - Reload the page. Hidden items stay hidden. Unhide All brings them back.
 - With a tab open, reload the extension, then click the icon on that tab without refreshing it. Pick mode should start.
 - Click the icon on `edge://extensions`. The icon shows a red `!` for a moment.
-- Open the practice page from the help panel and finish all three levels.
+- In the help panel, Black hole shows as locked ("finish the practice"). Open the practice page from the help panel, finish all three levels, and read the unlock screen. Black hole should now be selectable, and "Switch to Black hole for me" should select it.
+- Try the practice buttons (Next level, Reset, Switch to Black hole) with the mouse, since pick mode covers the page with a click-capture layer.
 
 ## Permissions
 
