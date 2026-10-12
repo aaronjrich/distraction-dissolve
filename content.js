@@ -1196,6 +1196,7 @@
       on: fn => practiceListeners.push(fn),
       enter: enterPickMode,
       exit: exitPickMode,
+      showAll,
       unlockBlackHole: () => { blackHoleUnlocked = true; syncEffectSelect(); },
       setEffect,
     };

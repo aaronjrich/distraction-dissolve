@@ -168,6 +168,7 @@
     // A clean start: drops any selection that pointed at the old scene
     restarting = true;
     if (picking) api.exit();
+    api.showAll(); // each level starts with nothing hidden and the count at zero
     ctx = L.build();
     api.enter();
     restarting = false;
@@ -242,7 +243,8 @@
       $('use-bh').textContent = 'Black hole is on. Dissolve one of the boxes below.';
       $('use-bh').disabled = true;
     });
-    $('toys-back').addEventListener('click', () => { api.exit(); buildPlayground(); api.enter(); });
+    // showAll first: the box around all three may itself have been dissolved
+    $('toys-back').addEventListener('click', () => { api.exit(); api.showAll(); buildPlayground(); api.enter(); });
 
     // Keep pick mode on so the effect can be tried on this page
     api.enter();
