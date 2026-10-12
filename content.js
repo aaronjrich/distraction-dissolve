@@ -4,6 +4,12 @@
   if (window.__dissolveLoaded) return;
   window.__dissolveLoaded = true;
 
+  // The practice page (an extension page) loads this same file and watches it
+  // through window.__dissolve. Nothing is remembered there.
+  const IS_PRACTICE = /-extension:$/.test(location.protocol);
+  const practiceListeners = [];
+  const emit = (type, detail) => practiceListeners.forEach(fn => { try { fn(type, detail); } catch {} });
+
   // ─── State ────────────────────────────────────────────────────────────────
   let pickMode = false;
   let hoveredEl = null;   // element under cursor (red preview)
@@ -22,7 +28,7 @@
 
   // The bar, help panel and the − / + buttons: never picked, never blocked
   function isOwnUI(el) {
-    return !!el?.closest?.('#dissolve-ui, #dissolve-size');
+    return !!el?.closest?.('#dissolve-ui, #dissolve-size, #dissolve-coach');
   }
 
   function blockEvent(e) {
@@ -323,6 +329,7 @@
     document.getElementById('dissolve-bar')?.classList.add('dissolve-bar-ready');
     showLabel(el);
     showSizeControls();
+    emit('select', { el });
   }
 
   function clearSelected() {
@@ -452,6 +459,8 @@
 
   function dissolveElement(el) {
     if (!el || isOwnUI(el)) return;
+    markPracticeNudgeSeen(); // they have found their way around
+    emit('dissolve', { el });
     const rect = el.getBoundingClientRect();
 
     // Zero-size items and reduced-motion users just get a plain hide
@@ -849,6 +858,7 @@
   const storageKey = id => `hidden::${id}`;
 
   function saveRecords() {
+    if (IS_PRACTICE) return;
     const key = storageKey(pageKey || pageId());
     try {
       if (records.length) chrome.storage.local.set({ [key]: records });
@@ -924,7 +934,7 @@
     const live = records;
     matched.clear();
     hiddenLog = [];
-    records = await loadRecords(pageKey);
+    records = IS_PRACTICE ? [] : await loadRecords(pageKey);
     for (const r of live) if (!records.some(x => x.sel === r.sel)) records.push(r);
     applyRecords();
   }
@@ -982,6 +992,7 @@
             <option value="blackhole">Black hole</option>
           </select>
         </div>
+        <button id="d-practice" class="d-wide">Open the practice page</button>
         <button id="d-debug-toggle" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); cursor: pointer; font-size: 12px;">Debug Mode: OFF</button>
         <p class="d-note">Hidden items are remembered next time you visit this page.</p>
       </div>
@@ -1048,6 +1059,8 @@
     size.addEventListener('mouseleave', hideTip);
 
     syncEffectSelect();
+    document.getElementById('d-practice').addEventListener('click', openPractice);
+    if (IS_PRACTICE) document.getElementById('d-practice').remove();
     document.getElementById('d-fx').addEventListener('change', e => setEffect(e.target.value));
     document.getElementById('d-done').addEventListener('click', exitPickMode);
     document.getElementById('d-showall').addEventListener('click', showAll);
@@ -1089,12 +1102,45 @@
     badge.classList.toggle('d-hidden', hiddenLog.length === 0);
   }
 
+  // ─── Practice page ────────────────────────────────────────────────────────
+  function openPractice() {
+    try { chrome.runtime.sendMessage({ action: 'openPractice' }); } catch {}
+    markPracticeNudgeSeen();
+  }
+
+  function markPracticeNudgeSeen() {
+    document.getElementById('d-nudge')?.remove();
+    try { chrome.storage?.local?.set({ practiceNudgeSeen: true }); } catch {}
+  }
+
+  // Shown once, the first time pick mode starts, until it is used or dismissed
+  async function maybeShowPracticeNudge() {
+    if (IS_PRACTICE) return;
+    try {
+      const res = await chrome.storage.local.get({ practiceNudgeSeen: false });
+      const ui = document.getElementById('dissolve-ui');
+      if (res?.practiceNudgeSeen || !pickMode || !ui || document.getElementById('d-nudge')) return;
+      const nudge = document.createElement('div');
+      nudge.id = 'd-nudge';
+      nudge.innerHTML = `
+        <span>New here?</span>
+        <button id="d-nudge-go">Try the 2-minute practice</button>
+        <button id="d-nudge-x" aria-label="Dismiss">×</button>
+      `;
+      ui.appendChild(nudge);
+      document.getElementById('d-nudge-go').addEventListener('click', openPractice);
+      document.getElementById('d-nudge-x').addEventListener('click', markPracticeNudgeSeen);
+    } catch {}
+  }
+
   // ─── Pick mode lifecycle ──────────────────────────────────────────────────
   function enterPickMode() {
     if (pickMode) return;
     pickMode = true;
     document.body.classList.add('dissolve-pick-mode');
     buildUI();
+    maybeShowPracticeNudge();
+    emit('pickmode', { on: true });
     document.addEventListener('mousemove', onMouseMove, true);
     document.addEventListener('click', onPickClick, true);
     document.addEventListener('contextmenu', onContextMenu, true);
@@ -1122,6 +1168,12 @@
     window.removeEventListener('resize', refreshBoxes);
     resetChain();
     lastMouse = null;
+    emit('pickmode', { on: false });
+  }
+
+  // The practice page drives and watches pick mode through this
+  if (IS_PRACTICE) {
+    window.__dissolve = { on: fn => practiceListeners.push(fn), enter: enterPickMode, exit: exitPickMode };
   }
 
   // ─── Message bridge ───────────────────────────────────────────────────────
