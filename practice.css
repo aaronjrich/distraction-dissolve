@@ -27,6 +27,7 @@ body {
 #dissolve-coach {
   position: sticky;
   top: 0;
+  z-index: 2147483645; /* above the click-capture layer, so the buttons stay clickable */
   align-self: start;
   height: 100vh;
   padding: 24px 22px;
@@ -154,7 +155,7 @@ kbd {
 
 @media (max-width: 900px) {
   body { grid-template-columns: 1fr; }
-  #dissolve-coach { position: static; height: auto; }
+  #dissolve-coach { position: relative; height: auto; }
   .page:has(.side), .cards { grid-template-columns: 1fr; }
   .popup { left: 50%; }
 }
